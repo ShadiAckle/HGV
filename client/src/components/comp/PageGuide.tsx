@@ -3,8 +3,7 @@ import { Info, HelpCircle, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { useLocation } from 'react-router';
-
-
+import { usePlainLanguage } from '@/hooks/usePlainLanguage';
 
 const PAGE_GUIDE: Record<string, { title: string; detail: string; hasLiveData: boolean }> = {
 
@@ -80,7 +79,36 @@ const PAGE_GUIDE: Record<string, { title: string; detail: string; hasLiveData: b
 
 };
 
-
+const PLAIN_PAGE_GUIDE: Record<string, { title: string; detail: string }> = {
+  '/': {
+    title: 'Home',
+    detail: 'Your pay dashboard. See what you earned, check your goal, and ask questions the easy way.',
+  },
+  '/my-compensation': {
+    title: 'My Pay',
+    detail: 'See your deals, your commission rate, how close you are to your goal, and what you should earn.',
+  },
+  '/team': {
+    title: 'Team Scoreboard',
+    detail: 'See how your team is doing on sales goals and who is leading the pack.',
+  },
+  '/admin-console': {
+    title: 'Plan Rules Room',
+    detail: 'Look up official pay rules, test what-if changes, and see how numbers are defined.',
+  },
+  '/comp-admin': {
+    title: 'Pay Admin',
+    detail: 'Check who qualifies for the plan, payout history, clawbacks, and paycheck previews.',
+  },
+  '/finance': {
+    title: 'Company Pay Costs',
+    detail: 'See how much the company spends on pay vs budget, tour results, and bonus payback.',
+  },
+  '/how-to': {
+    title: 'Help',
+    detail: 'How to use the app, ask the AI advisor questions, and where the numbers come from.',
+  },
+};
 
 const STORAGE_PREFIX = 'hgv_guide_dismissed_';
 
@@ -89,8 +117,12 @@ const STORAGE_PREFIX = 'hgv_guide_dismissed_';
 export function PageGuide() {
 
   const { pathname } = useLocation();
+  const { enabled: plainEnglish } = usePlainLanguage();
 
   const guide = PAGE_GUIDE[pathname];
+  const plainGuide = PLAIN_PAGE_GUIDE[pathname];
+  const displayTitle = plainEnglish && plainGuide ? plainGuide.title : guide?.title;
+  const displayDetail = plainEnglish && plainGuide ? plainGuide.detail : guide?.detail;
 
   
 
@@ -176,13 +208,13 @@ export function PageGuide() {
 
         <p className="font-semibold text-foreground">
 
-          Guide: {guide.title}
+          Guide: {displayTitle ?? guide.title}
 
           {guide.hasLiveData ? (
 
             <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-[9px] font-bold text-primary uppercase">
 
-              Live SQL Data
+              {plainEnglish ? 'Live Numbers' : 'Live SQL Data'}
 
             </span>
 
@@ -190,7 +222,7 @@ export function PageGuide() {
 
             <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-[9px] font-bold text-muted-foreground uppercase">
 
-              Reference / Policy Q&amp;A
+              {plainEnglish ? 'Help & Tips' : 'Reference / Policy Q&A'}
 
             </span>
 
@@ -198,7 +230,7 @@ export function PageGuide() {
 
         </p>
 
-        <p className="mt-1 leading-relaxed text-muted-foreground">{guide.detail}</p>
+        <p className="mt-1 leading-relaxed text-muted-foreground">{displayDetail ?? guide.detail}</p>
 
       </div>
 

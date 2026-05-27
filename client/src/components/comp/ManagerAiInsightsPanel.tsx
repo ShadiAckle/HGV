@@ -3,6 +3,7 @@ import { renderMarkdown } from '@/components/comp/CompCopilot';
 import { AiGeneratedFooter, type AiGenerationMeta } from '@/components/comp/AiGeneratedFooter';
 import { LuxeDbLoader } from '@/components/comp/LuxeDbLoader';
 import { deriveLoadingSteps } from '@/lib/loadingSteps';
+import { usePlainLanguage } from '@/hooks/usePlainLanguage';
 
 export type ManagerInsightFocus = 'payout' | 'coaching';
 
@@ -21,6 +22,24 @@ const PANEL_COPY: Record<
     subtitle: 'Executive coaching brief from direct-report production. Detailed rep/tour signals appear in Supporting Signals below.',
     contextLabel: 'Reviewing direct-report production signals',
     llmLabel: 'Prioritizing team coaching actions',
+  },
+};
+
+const PLAIN_PANEL_COPY: Record<
+  ManagerInsightFocus,
+  { title: string; subtitle: string; contextLabel: string; llmLabel: string }
+> = {
+  payout: {
+    title: 'Your Bonus — Simple Summary',
+    subtitle: 'Simple summary of what drives your manager pay and where the money is.',
+    contextLabel: 'Pulling your plan and pay numbers',
+    llmLabel: 'Writing your pay summary the simple way',
+  },
+  coaching: {
+    title: 'Who Needs Help — Simple Summary',
+    subtitle: 'Simple list of which reps need coaching and why — details are below.',
+    contextLabel: 'Checking how each rep is doing',
+    llmLabel: 'Writing coaching tips the simple way',
   },
 };
 
@@ -44,7 +63,8 @@ export function ManagerAiInsightsPanel({
   insightsContext,
   enabled = true,
 }: ManagerAiInsightsPanelProps) {
-  const copy = PANEL_COPY[focus];
+  const { enabled: plainEnglish, apiFlag } = usePlainLanguage();
+  const copy = plainEnglish ? PLAIN_PANEL_COPY[focus] : PANEL_COPY[focus];
   const [aiInsights, setAiInsights] = useState<string | null>(null);
   const [aiInsightSource, setAiInsightSource] = useState<'llm' | null>(null);
   const [meta, setMeta] = useState<AiGenerationMeta | null>(null);
@@ -68,6 +88,7 @@ export function ManagerAiInsightsPanel({
           persona_id: personaId,
           focus,
           refresh_key: crypto.randomUUID(),
+          plain_english: apiFlag,
         }),
       });
       const body = (await res.json().catch(() => ({}))) as {
@@ -91,7 +112,7 @@ export function ManagerAiInsightsPanel({
     } finally {
       setLoading(false);
     }
-  }, [managerRepId, periodId, roleTitle, personaId, insightsContext, focus]);
+  }, [managerRepId, periodId, roleTitle, personaId, insightsContext, focus, apiFlag]);
 
   useEffect(() => {
     if (!enabled) return;

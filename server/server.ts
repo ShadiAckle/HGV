@@ -38,6 +38,7 @@ import {
 import { projectScenario } from '../shared/scenarioProjection.js';
 import {
   appendGenerationVariation,
+  isPlainEnglishEnabled,
   buildGenerationMeta,
   invokeServingModelDetailed,
 } from './llmInvoke.js';
@@ -57,6 +58,12 @@ function setServingResponseHeaders(
   if (info.is_fallback_model) {
     console.warn(`[LLM] Response served by fallback model: ${endpoint}`);
   }
+}
+
+function parsePlainEnglish(body: unknown): boolean {
+  if (!body || typeof body !== 'object') return false;
+  const b = body as { simple_language?: unknown; plain_english?: unknown };
+  return isPlainEnglishEnabled(b.plain_english) || isPlainEnglishEnabled(b.simple_language);
 }
 
 let wsClient: ReturnType<typeof getWorkspaceClient> | null = null;
@@ -627,6 +634,7 @@ appkit.server.extend((app) => {
 
   // POST /api/comp/manager/insights — LLM-generated executive brief for manager comp page
   app.post('/api/comp/manager/insights', async (req, res) => {
+    const plainEnglish = parsePlainEnglish(req.body);
     const {
       manager_rep_id: managerRepId,
       period_id: periodId = CURRENT_PERIOD_ID,
@@ -685,6 +693,7 @@ appkit.server.extend((app) => {
           teamMarketPositions: mapWarehouseTeamMarket(teamRows),
         }),
         refreshKey,
+        plainEnglish,
       );
       const requestBody = {
         messages: [{ role: 'user', content: prompt }],
@@ -726,6 +735,7 @@ appkit.server.extend((app) => {
 
   // POST /api/comp/rep/insights — LLM-generated payout brief for sales & marketing reps
   app.post('/api/comp/rep/insights', async (req, res) => {
+    const plainEnglish = parsePlainEnglish(req.body);
     const {
       rep_id: repId,
       period_id: periodId = CURRENT_PERIOD_ID,
@@ -766,7 +776,7 @@ appkit.server.extend((app) => {
       const basePrompt = useMarketing
         ? buildMarketingRepInsightPrompt(context.slice(0, 12000), resolvedRole, grounding)
         : buildSalesRepInsightPrompt(context.slice(0, 12000), resolvedRole, grounding);
-      const prompt = appendGenerationVariation(basePrompt, refreshKey);
+      const prompt = appendGenerationVariation(basePrompt, refreshKey, plainEnglish);
 
       const requestBody = {
         messages: [{ role: 'user', content: prompt }],
@@ -808,6 +818,7 @@ appkit.server.extend((app) => {
 
   // POST /api/comp/rep/benchmark-impact — LLM-synthesized industry benchmark impact cards
   app.post('/api/comp/rep/benchmark-impact', async (req, res) => {
+    const plainEnglish = parsePlainEnglish(req.body);
     const {
       rep_id: repId,
       period_id: periodId = CURRENT_PERIOD_ID,
@@ -839,6 +850,7 @@ appkit.server.extend((app) => {
           industryBenchmarks: industryRows,
         }),
         refreshKey,
+        plainEnglish,
       );
 
       const requestBody = {
@@ -903,6 +915,7 @@ appkit.server.extend((app) => {
       json: (body: unknown) => void;
     },
   ): Promise<void> {
+    const plainEnglish = parsePlainEnglish(req.body);
     const {
       insights_context: insightsContext,
       role_title: roleTitle = 'Compensation Analyst',
@@ -918,6 +931,7 @@ appkit.server.extend((app) => {
     const prompt = appendGenerationVariation(
       buildInterpretationPrompt(kind, context, roleTitle),
       refreshKey,
+      plainEnglish,
     );
     const requestBody = {
       messages: [{ role: 'user', content: prompt }],

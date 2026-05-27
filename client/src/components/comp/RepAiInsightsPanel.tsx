@@ -3,6 +3,7 @@ import { renderMarkdown } from '@/components/comp/CompCopilot';
 import { AiGeneratedFooter, type AiGenerationMeta } from '@/components/comp/AiGeneratedFooter';
 import { LuxeDbLoader } from '@/components/comp/LuxeDbLoader';
 import { deriveLoadingSteps } from '@/lib/loadingSteps';
+import { usePlainLanguage } from '@/hooks/usePlainLanguage';
 
 export type RepInsightChannel = 'sales' | 'marketing';
 
@@ -24,6 +25,24 @@ const PANEL_COPY: Record<
   },
 };
 
+const PLAIN_PANEL_COPY: Record<
+  RepInsightChannel,
+  { title: string; subtitle: string; contextLabel: string; llmLabel: string }
+> = {
+  sales: {
+    title: 'Your Pay — Simple Summary',
+    subtitle: 'Simple summary of your sales goal, what you earned, and your deals.',
+    contextLabel: 'Pulling your goal and pay numbers',
+    llmLabel: 'Writing your pay summary the simple way',
+  },
+  marketing: {
+    title: 'Tour Pay — Simple Summary',
+    subtitle: 'Simple summary of your tours, bonuses, and next pay level.',
+    contextLabel: 'Pulling your tour and bonus numbers',
+    llmLabel: 'Writing your pay summary the simple way',
+  },
+};
+
 interface RepAiInsightsPanelProps {
   repId: string;
   periodId: string;
@@ -42,7 +61,8 @@ export function RepAiInsightsPanel({
   insightsContext,
   enabled = true,
 }: RepAiInsightsPanelProps) {
-  const copy = PANEL_COPY[channel];
+  const { enabled: plainEnglish, apiFlag } = usePlainLanguage();
+  const copy = plainEnglish ? PLAIN_PANEL_COPY[channel] : PANEL_COPY[channel];
   const [aiInsights, setAiInsights] = useState<string | null>(null);
   const [aiInsightSource, setAiInsightSource] = useState<'llm' | null>(null);
   const [meta, setMeta] = useState<AiGenerationMeta | null>(null);
@@ -65,6 +85,7 @@ export function RepAiInsightsPanel({
           insights_context: insightsContext,
           channel,
           refresh_key: crypto.randomUUID(),
+          plain_english: apiFlag,
         }),
       });
       const body = (await res.json().catch(() => ({}))) as {
@@ -88,7 +109,7 @@ export function RepAiInsightsPanel({
     } finally {
       setLoading(false);
     }
-  }, [repId, periodId, roleTitle, insightsContext, channel]);
+  }, [repId, periodId, roleTitle, insightsContext, channel, apiFlag]);
 
   useEffect(() => {
     if (!enabled) return;

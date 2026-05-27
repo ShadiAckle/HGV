@@ -9,6 +9,8 @@ import {
 import { LuxeDbLoader } from '@/components/comp/LuxeDbLoader';
 import { initLoadingSteps, patchLoadingStep, type LoadingStep } from '@/lib/loadingSteps';
 import { FINANCE_LOAD_STEP_DEFS } from '@/lib/loadingStepLabels';
+import { usePlainLanguage } from '@/hooks/usePlainLanguage';
+import { toPlainLabel } from '@shared/plainLanguage';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const fmt  = (n: number | null | undefined, dec = 0) =>
@@ -45,10 +47,12 @@ const FINANCE_PROMPTS = [
 ] as const;
 
 // ── KPI Card ─────────────────────────────────────────────────────────────────
-function KpiCard({ label, value, sub, icon: Icon, accent, trend, risk }: {
+function KpiCard({ label, value, sub, icon: Icon, accent, trend, risk, plainEnglish }: {
   label: string; value: string; sub?: string; icon: React.ComponentType<any>;
-  accent?: string; trend?: 'up' | 'down' | null; risk?: boolean;
+  accent?: string; trend?: 'up' | 'down' | null; risk?: boolean; plainEnglish?: boolean;
 }) {
+  const displayLabel = toPlainLabel(label, plainEnglish === true);
+  const displaySub = sub ? toPlainLabel(sub, plainEnglish === true) : undefined;
   return (
     <div style={{
       background: 'var(--bg-card)', border: `1px solid ${risk ? 'rgba(239,68,68,0.4)' : 'var(--border)'}`,
@@ -65,7 +69,7 @@ function KpiCard({ label, value, sub, icon: Icon, accent, trend, risk }: {
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-          <div style={{ fontSize: 11, color: 'var(--foreground-muted)', fontWeight: 600, letterSpacing: '0.05em', textTransform: 'uppercase' }}>{label}</div>
+          <div style={{ fontSize: 11, color: 'var(--foreground-muted)', fontWeight: 600, letterSpacing: plainEnglish ? '0.02em' : '0.05em', textTransform: plainEnglish ? 'none' : 'uppercase' }}>{displayLabel}</div>
           {risk && <AlertTriangle size={11} color="#EF4444" />}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginTop: 3 }}>
@@ -73,18 +77,19 @@ function KpiCard({ label, value, sub, icon: Icon, accent, trend, risk }: {
           {trend === 'up' && <ArrowUpRight size={16} color="#10B981" />}
           {trend === 'down' && <ArrowDownRight size={16} color="#EF4444" />}
         </div>
-        {sub && <div style={{ fontSize: 11, color: 'var(--foreground-muted)', marginTop: 4 }}>{sub}</div>}
+        {displaySub && <div style={{ fontSize: 11, color: 'var(--foreground-muted)', marginTop: 4 }}>{displaySub}</div>}
       </div>
     </div>
   );
 }
 
 // ── Bar Chart (pure CSS/SVG-free) ─────────────────────────────────────────────
-function MiniBarChart({ rows, labelKey, valueKey, color = '#3B82F6' }: {
+function MiniBarChart({ rows, labelKey, valueKey, color = '#3B82F6', labelFontSize = 11 }: {
   rows: Record<string, unknown>[];
   labelKey: string;
   valueKey: string;
   color?: string;
+  labelFontSize?: number;
 }) {
   if (!rows.length) return null;
   const max = Math.max(...rows.map(r => Number(r[valueKey] ?? 0)), 1);
@@ -95,13 +100,13 @@ function MiniBarChart({ rows, labelKey, valueKey, color = '#3B82F6' }: {
         const pct = (val / max) * 100;
         return (
           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <div style={{ width: 100, fontSize: 11, color: 'var(--foreground-muted)', fontWeight: 600, flexShrink: 0, textAlign: 'right' }}>
+            <div style={{ width: 100, fontSize: labelFontSize, color: 'var(--foreground-muted)', fontWeight: 600, flexShrink: 0, textAlign: 'right' }}>
               {String(row[labelKey] ?? '—')}
             </div>
-            <div style={{ flex: 1, height: 20, background: 'var(--bg-elevated)', borderRadius: 4, overflow: 'hidden', position: 'relative' }}>
+            <div style={{ flex: 1, height: 20, background: 'var(--bg-elevated)', borderRadius: 6, overflow: 'hidden', position: 'relative' }}>
               <div style={{
                 height: '100%', width: `${pct}%`, background: color,
-                borderRadius: 4, transition: 'width 0.4s ease',
+                borderRadius: 6, transition: 'width 0.4s ease',
                 minWidth: pct > 0 ? 3 : 0,
               }} />
             </div>
@@ -221,6 +226,7 @@ function buildFinanceContext(data: {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export function FinancePage() {
   const { activePeriodId } = useAppContext();
+  const { label: plainLabel, charts, enabled: plainEnglish } = usePlainLanguage();
   const [activeTab, setActiveTab] = useState<FinTab>('cost');
   const [loading, setLoading] = useState(false);
   const [loadSteps, setLoadSteps] = useState<LoadingStep[]>(() => initLoadingSteps([...FINANCE_LOAD_STEPS]));
@@ -288,10 +294,10 @@ export function FinancePage() {
   const copilotCtx = buildFinanceContext({ costData, tourData, leadData, roiData, exposureData, accrualData, perfData, periodId });
 
   const TABS: { id: FinTab; label: string; icon: React.ComponentType<any> }[] = [
-    { id: 'cost',    label: 'Cost Analysis',  icon: BarChart2 },
-    { id: 'tours',   label: 'Tour Quality',   icon: Activity },
-    { id: 'spiff',   label: 'SPIFF / ROI',    icon: Zap },
-    { id: 'accruals', label: 'Accruals',      icon: BookOpen },
+    { id: 'cost',    label: plainLabel('Cost Analysis'),  icon: BarChart2 },
+    { id: 'tours',   label: plainLabel('Tour Quality'),   icon: Activity },
+    { id: 'spiff',   label: plainLabel('SPIFF / ROI'),    icon: Zap },
+    { id: 'accruals', label: plainLabel('Accruals'),      icon: BookOpen },
   ];
 
   return (
@@ -344,6 +350,7 @@ export function FinancePage() {
             icon={TrendingUp}
             accent={varCompAtRisk ? '#EF4444' : '#0EA5E9'}
             risk={varCompAtRisk}
+            plainEnglish={plainEnglish}
           />
           <KpiCard
             label="Total Incentive Cost"
@@ -351,6 +358,7 @@ export function FinancePage() {
             sub={`Budget: ${fmtK(costData?.budget_comp)} | Variance: ${fmtK(Math.abs(costData?.budget_variance ?? 0))} ${(costData?.budget_variance ?? 0) < 0 ? 'under' : 'over'}`}
             icon={DollarSign}
             accent="#0EA5E9"
+            plainEnglish={plainEnglish}
           />
           <KpiCard
             label="Open Reserve Liability"
@@ -358,6 +366,7 @@ export function FinancePage() {
             sub="From chargebacks & rescissions"
             icon={Shield}
             accent={openReserve > 300000 ? '#F59E0B' : '#10B981'}
+            plainEnglish={plainEnglish}
           />
           <KpiCard
             label="Accrual to Book"
@@ -365,6 +374,7 @@ export function FinancePage() {
             sub={accrualData?.payroll_lock_date ? `Lock: ${accrualData.payroll_lock_date}` : 'Lock date from dim_finance_period'}
             icon={Layers}
             accent="#8B5CF6"
+            plainEnglish={plainEnglish}
           />
         </div>
 
@@ -403,7 +413,7 @@ export function FinancePage() {
                     Incentive Cost by Role
                   </div>
                   {costData?.by_role?.length ? (
-                    <MiniBarChart rows={costData.by_role} labelKey="level_code" valueKey="total_comp" color="#0EA5E9" />
+                    <MiniBarChart rows={costData.by_role} labelKey="level_code" valueKey="total_comp" color={charts.colors.primary} labelFontSize={charts.labelFontSize} />
                   ) : (
                     <div style={{ color: 'var(--foreground-muted)', fontSize: 13 }}>Loading cost data…</div>
                   )}

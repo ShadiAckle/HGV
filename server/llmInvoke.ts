@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { getWorkspaceClient } from '@databricks/appkit';
+import { finalizeLlmPrompt, isPlainEnglishEnabled } from '../shared/plainLanguage.js';
 
 export const PRIMARY_SERVING_ENDPOINT =
   process.env.DATABRICKS_SERVING_ENDPOINT_NAME ?? 'databricks-claude-sonnet-4-6';
@@ -33,14 +34,18 @@ async function queryFallbackEndpoint(body: Record<string, unknown>): Promise<unk
   } as never);
 }
 
+export { isPlainEnglishEnabled };
+
 /** Append a unique pass id so repeated refreshes with identical data still vary phrasing. */
-export function appendGenerationVariation(prompt: string, refreshKey?: string): string {
-  const pass = refreshKey?.trim() || randomUUID();
-  return [
-    prompt,
-    '',
-    `Generation pass ${pass}: keep every number and fact identical to context, but write fresh headlines, badges, and sentence openers — do not reuse phrasing from typical template copy.`,
-  ].join('\n');
+export function appendGenerationVariation(
+  prompt: string,
+  refreshKey?: string,
+  plainEnglish?: boolean,
+): string {
+  return finalizeLlmPrompt(prompt, {
+    refreshKey: refreshKey?.trim() || randomUUID(),
+    plainEnglish: plainEnglish === true,
+  });
 }
 
 export function buildGenerationMeta(endpoint: string, refreshKey?: string): AiGenerationMeta {

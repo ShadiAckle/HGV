@@ -5,6 +5,7 @@ import { LuxeDbLoader } from '@/components/comp/LuxeDbLoader';
 import { deriveLoadingSteps } from '@/lib/loadingSteps';
 import { LOADING } from '@/lib/loadingStepLabels';
 import type { CompImpactLine, CompImpactStatus } from '@shared/compStatementImpact';
+import { usePlainLanguage } from '@/hooks/usePlainLanguage';
 
 interface CompStatementImpactPanelProps {
   repId: string;
@@ -29,7 +30,7 @@ function statusBorder(status: CompImpactStatus): string {
   return 'rgba(26,109,255,0.25)';
 }
 
-function ImpactRow({ line, index }: { line: CompImpactLine; index: number }) {
+function ImpactRow({ line, index, plain }: { line: CompImpactLine; index: number; plain: boolean }) {
   const staggerClass = ['animate-stagger-1', 'animate-stagger-2', 'animate-stagger-3', 'animate-stagger-4'][index] ?? 'animate-fade-in-up';
   return (
     <div
@@ -43,7 +44,7 @@ function ImpactRow({ line, index }: { line: CompImpactLine; index: number }) {
         <div className="flex items-center gap-2">
           {statusIcon(line.status)}
           <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
-            Area {line.areaId}
+            {plain ? `Topic ${line.areaId}` : `Area ${line.areaId}`}
           </span>
           <span
             className="rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide"
@@ -76,7 +77,7 @@ function ImpactRow({ line, index }: { line: CompImpactLine; index: number }) {
         <p
           className="mt-2 rounded-lg border border-primary/20 bg-primary/5 px-2.5 py-2 text-[10.5px] leading-relaxed text-foreground/85"
         >
-          <span className="font-bold text-primary">Market-aligned preview: </span>
+          <span className="font-bold text-primary">{plain ? 'What good looks like: ' : 'Market-aligned preview: '}</span>
           {line.marketAlignedPreview}
         </p>
       )}
@@ -92,6 +93,7 @@ export function CompStatementImpactPanel({
   insightsContext,
   enabled = true,
 }: CompStatementImpactPanelProps) {
+  const { enabled: plainEnglish, apiFlag } = usePlainLanguage();
   const [lines, setLines] = useState<CompImpactLine[]>([]);
   const [source, setSource] = useState<'llm' | null>(null);
   const [meta, setMeta] = useState<AiGenerationMeta | null>(null);
@@ -114,6 +116,7 @@ export function CompStatementImpactPanel({
           role_key: roleKey,
           insights_context: insightsContext,
           refresh_key: crypto.randomUUID(),
+          plain_english: apiFlag,
         }),
       });
       const body = (await res.json().catch(() => ({}))) as {
@@ -137,7 +140,7 @@ export function CompStatementImpactPanel({
     } finally {
       setLoading(false);
     }
-  }, [repId, periodId, roleTitle, roleKey, insightsContext]);
+  }, [repId, periodId, roleTitle, roleKey, insightsContext, apiFlag]);
 
   useEffect(() => {
     if (!enabled || !insightsContext) return;
@@ -176,14 +179,18 @@ export function CompStatementImpactPanel({
           <div className="flex items-center gap-2">
             <Scale size={14} color="var(--gold)" />
             <span className="text-[9px] font-bold uppercase tracking-wider text-amber-500">
-              Industry Benchmark Impact
+              {plainEnglish ? 'How the Market Affects Your Pay' : 'Industry Benchmark Impact'}
             </span>
           </div>
           <h3 className="mt-1 text-sm font-bold text-foreground">
-            How Market Standards Affect Your Comp Statement
+            {plainEnglish
+              ? 'What Industry Standards Mean for Your Paycheck'
+              : 'How Market Standards Affect Your Comp Statement'}
           </h3>
           <p className="mt-1 max-w-xl text-[11px] leading-relaxed text-muted-foreground">
-            Personalized to your live earnings, pay mix, and role-specific market benchmarks.
+            {plainEnglish
+              ? 'Simple look at your pay vs what similar roles earn in the market.'
+              : 'Personalized to your live earnings, pay mix, and role-specific market benchmarks.'}
           </p>
         </div>
         {source === 'llm' && atRiskCount > 0 && (
@@ -210,7 +217,7 @@ export function CompStatementImpactPanel({
       {source === 'llm' && !loading && (
         <div className="flex flex-col gap-3">
           {lines.map((line, index) => (
-            <ImpactRow key={line.areaId} line={line} index={index} />
+            <ImpactRow key={line.areaId} line={line} index={index} plain={plainEnglish} />
           ))}
           <AiGeneratedFooter meta={meta} onRegenerate={() => void fetchImpact()} regenerating={loading} />
         </div>

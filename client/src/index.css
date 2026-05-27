@@ -768,4 +768,37 @@ input[type="range"]::-webkit-slider-thumb:hover {
 .mr-1 { margin-right: 0.25rem !important; }
 .mr-2 { margin-right: 0.5rem !important; }
 
+/* ── Simple View mode ───────────────────────────────────────────────────── */
+html.plain-english-mode {
+  --chart-grid: rgba(148, 163, 184, 0.12);
+}
+
+html.plain-english-mode .plain-kpi-label {
+  text-transform: none !important;
+  letter-spacing: 0.02em !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+}
+
+html.plain-english-mode h3,
+html.plain-english-mode h4 {
+  letter-spacing: 0.01em !important;
+}
+
+html.plain-english-mode .uppercase {
+  text-transform: none !important;
+  letter-spacing: 0.02em !important;
+}
+
+html.plain-english-mode .glass-card svg text {
+  font-size: 12px;
+}
+
+html.plain-english-mode .comp-impact-row {
+  border-width: 2px !important;
+}
+
+html.plain-english-mode .nav-tab {
+  font-weight: 600;
+}
 

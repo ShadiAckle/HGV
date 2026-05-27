@@ -5,6 +5,7 @@ import { AiGeneratedFooter, type AiGenerationMeta } from '@/components/comp/AiGe
 import { LuxeDbLoader } from '@/components/comp/LuxeDbLoader';
 import { deriveLoadingSteps } from '@/lib/loadingSteps';
 import { LOADING } from '@/lib/loadingStepLabels';
+import { usePlainLanguage } from '@/hooks/usePlainLanguage';
 
 interface CompInterpretationPanelProps {
   endpoint: string;
@@ -31,6 +32,9 @@ export function CompInterpretationPanel({
   compact = false,
   className = '',
 }: CompInterpretationPanelProps) {
+  const { label, apiFlag } = usePlainLanguage();
+  const displayTitle = label(title);
+  const displaySubtitle = subtitle ? label(subtitle) : undefined;
   const [insight, setInsight] = useState<string | null>(null);
   const [source, setSource] = useState<'llm' | null>(null);
   const [meta, setMeta] = useState<AiGenerationMeta | null>(null);
@@ -50,6 +54,7 @@ export function CompInterpretationPanel({
           insights_context: insightsContext,
           role_title: roleTitle,
           refresh_key: crypto.randomUUID(),
+          plain_english: apiFlag,
         }),
       });
       const body = (await res.json().catch(() => ({}))) as {
@@ -71,7 +76,7 @@ export function CompInterpretationPanel({
     } finally {
       setLoading(false);
     }
-  }, [endpoint, insightsContext, roleTitle]);
+  }, [endpoint, insightsContext, roleTitle, apiFlag]);
 
   useEffect(() => {
     if (!enabled || !insightsContext.trim()) return;
@@ -97,12 +102,12 @@ export function CompInterpretationPanel({
       <div className="mb-3 flex items-start gap-2">
         <Sparkles size={14} className="mt-0.5 shrink-0 text-primary" aria-hidden />
         <div>
-          <h4 className="text-[11px] font-bold uppercase tracking-wider text-primary">{title}</h4>
-          {subtitle && <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">{subtitle}</p>}
+          <h4 className="text-[11px] font-bold uppercase tracking-wider text-primary">{displayTitle}</h4>
+          {displaySubtitle && <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">{displaySubtitle}</p>}
         </div>
       </div>
 
-      {loading && <LuxeDbLoader loading variant="inline" steps={steps} title={title} />}
+      {loading && <LuxeDbLoader loading variant="inline" steps={steps} title={displayTitle} />}
       {error && !loading && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
           {error}

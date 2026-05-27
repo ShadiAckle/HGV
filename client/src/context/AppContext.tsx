@@ -12,6 +12,7 @@ import {
 } from '@/data/identityCatalog';
 import type { MarketingPersonaId } from '@/data/marketingPlanAssessment';
 import { DEFAULT_PERIODS, LEGACY_PERIOD_ID, LEGACY_PRIOR_PERIOD_ID } from '@shared/compPeriods';
+import { PLAIN_ENGLISH_STORAGE_KEY } from '@shared/plainLanguage';
 
 export interface UserProfile {
   rep_id: string;
@@ -110,6 +111,9 @@ interface AppContextType {
   changeActivePeriod: (periodId: string) => void;
   changeActiveScenario: (scenarioId: string) => void;
   refreshUserProfile: () => Promise<void>;
+  /** Field mode — simpler labels and AI phrasing for frontline reps. */
+  plainEnglish: boolean;
+  togglePlainEnglish: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -133,6 +137,13 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [loadingMetadata, setLoadingMetadata] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [plainEnglish, setPlainEnglish] = useState(() => {
+    try {
+      return localStorage.getItem(PLAIN_ENGLISH_STORAGE_KEY) === 'true';
+    } catch {
+      return false;
+    }
+  });
 
   // Fetch resolved user profile from headers
   const fetchUserProfile = async () => {
@@ -260,6 +271,17 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
     void fetchMetadata();
   }, []);
 
+  useEffect(() => {
+    document.documentElement.classList.toggle('plain-english-mode', plainEnglish);
+    try {
+      localStorage.setItem(PLAIN_ENGLISH_STORAGE_KEY, plainEnglish ? 'true' : 'false');
+    } catch {
+      /* ignore storage errors */
+    }
+  }, [plainEnglish]);
+
+  const togglePlainEnglish = () => setPlainEnglish((v) => !v);
+
   // Ensure active identity stays on a marketing plan persona
   useEffect(() => {
     if (loadingMetadata) return;
@@ -320,6 +342,8 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
         changeActivePeriod,
         changeActiveScenario,
         refreshUserProfile: fetchUserProfile,
+        plainEnglish,
+        togglePlainEnglish,
       }}
     >
       {children}

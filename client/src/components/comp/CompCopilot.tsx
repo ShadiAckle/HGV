@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatQueryError } from '@/lib/compFormat';
 import { VisualMentionLibrary } from './VisualMentionLibrary';
 import { CopilotQuestionsMenu } from './CopilotSuggestedQuestions';
+import { usePlainLanguage } from '@/hooks/usePlainLanguage';
+import { PLAIN_ENGLISH_LLM_BLOCK } from '@shared/plainLanguage';
 
 interface ChatChoice {
   message?: { content?: string };
@@ -130,6 +132,7 @@ export function CompCopilot({
   const [showMentionLibrary, setShowMentionLibrary] = useState(false);
   const [configuredModel, setConfiguredModel] = useState<string | null>(null);
   const [lastServingEndpoint, setLastServingEndpoint] = useState<string | null>(null);
+  const { enabled: plainEnglish, label: plainLabel } = usePlainLanguage();
 
   useEffect(() => {
     void fetch('/api/comp/model-info')
@@ -215,6 +218,12 @@ export function CompCopilot({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dataContext, contextLoading, contextError]);
+
+  // Re-generate auto-insights when Simple View toggles
+  useEffect(() => {
+    setInsights(null);
+    setInsightsAutoTriggered(false);
+  }, [plainEnglish]);
 
   // Handle parent-triggered input (prefill or auto-submit)
   useEffect(() => {
@@ -358,6 +367,8 @@ export function CompCopilot({
       '7. When policy explains a behavior (e.g. a clawback, NQ rating), cite the specific rule and how it applies.',
       '8. For scenario comparisons, state the exact delta between scenarios in dollar amounts and percentage points.',
       '9. If the user mentions any specific entity using "@rep:...", "@team:...", "@scenario:...", or "@deal:...", look them up in the MENTION LOOKUP section below and give precise answers based on that data.',
+      plainEnglish ? '' : '',
+      plainEnglish ? PLAIN_ENGLISH_LLM_BLOCK : '',
       '',
       '=== LIVE TRANSACTION & POLICY DATA CONTEXT ===',
       dataContext,
@@ -503,7 +514,7 @@ export function CompCopilot({
           <div className="flex items-center justify-between gap-2">
             <p className="flex min-w-0 items-center gap-2 text-sm font-bold text-foreground">
               <Bot className="h-4 w-4 shrink-0 text-primary" aria-hidden />
-              <span className="truncate">{title}</span>
+              <span className="truncate">{plainLabel(title)}</span>
             </p>
             <div className="flex shrink-0 items-center gap-1">
               {examplePrompts.length > 0 && (
@@ -571,7 +582,7 @@ export function CompCopilot({
             </div>
           </div>
           {description ? (
-            <p className="text-[11px] leading-snug text-muted-foreground font-medium">{description}</p>
+            <p className="text-[11px] leading-snug text-muted-foreground font-medium">{plainLabel(description)}</p>
           ) : null}
           <p className="text-[10px] text-muted-foreground/60 truncate">
             {configuredModel ? (

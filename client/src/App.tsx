@@ -12,6 +12,7 @@ import { AppContextProvider, useAppContext } from './context/AppContext';
 import { getMarketingDropdownIdentities, resolveRoleTitle } from './data/identityCatalog';
 import { Loader2 } from 'lucide-react';
 import { LuxeDbLoader } from '@/components/comp/LuxeDbLoader';
+import { SimpleViewToggle } from '@/components/comp/SimpleViewToggle';
 
 // ── Nav link class helper ───────────────────────────────────────────
 const navLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -135,8 +136,9 @@ function Layout() {
           </nav>
         </div>
 
-        {/* Right: Period + Identity */}
+        {/* Right: Simple View + Period + Identity */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexShrink: 0 }}>
+          <SimpleViewToggle />
 
           {/* Period picker */}
           {(identityLoading || metadataReady) && (

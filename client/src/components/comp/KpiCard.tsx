@@ -1,6 +1,7 @@
 import { TrendingDown, TrendingUp, Minus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ReactNode } from 'react';
+import { usePlainLanguage } from '@/hooks/usePlainLanguage';
 
 interface KpiCardProps {
   label: string;
@@ -13,6 +14,9 @@ interface KpiCardProps {
 }
 
 export function KpiCard({ label, value, subtext, delta, trend = 'neutral', icon, className }: KpiCardProps) {
+  const { label: plainLabel, enabled } = usePlainLanguage();
+  const displayLabel = plainLabel(label);
+  const displaySubtext = subtext ? plainLabel(subtext) : undefined;
   const TrendIcon =
     trend === 'positive' ? TrendingUp :
     trend === 'negative' ? TrendingDown :
@@ -21,9 +25,12 @@ export function KpiCard({ label, value, subtext, delta, trend = 'neutral', icon,
   return (
     <div className={cn('glass-card p-6 hgv-card-hover group', className)}>
       <div className="flex items-center justify-between">
-        <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+        <span className={cn(
+          'flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground',
+          enabled && 'plain-kpi-label',
+        )}>
           {icon && <span className="text-primary">{icon}</span>}
-          {label}
+          {displayLabel}
         </span>
         {delta && (
           <span className={cn(
@@ -42,7 +49,7 @@ export function KpiCard({ label, value, subtext, delta, trend = 'neutral', icon,
         {value}
       </p>
 
-      {subtext && (
+      {displaySubtext && (
         <p className={cn(
           'mt-1.5 flex items-center gap-1 text-[11px] font-medium',
           trend === 'positive' && 'text-emerald-500',
@@ -50,7 +57,7 @@ export function KpiCard({ label, value, subtext, delta, trend = 'neutral', icon,
           trend === 'neutral' && 'text-muted-foreground',
         )}>
           <TrendIcon className="h-3 w-3 shrink-0" aria-hidden />
-          {subtext}
+          {displaySubtext}
         </p>
       )}
     </div>
