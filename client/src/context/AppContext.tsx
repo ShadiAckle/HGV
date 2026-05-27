@@ -12,7 +12,7 @@ import {
 } from '@/data/identityCatalog';
 import type { MarketingPersonaId } from '@/data/marketingPlanAssessment';
 import { DEFAULT_PERIODS, LEGACY_PERIOD_ID, LEGACY_PRIOR_PERIOD_ID } from '@shared/compPeriods';
-import { PLAIN_ENGLISH_STORAGE_KEY } from '@shared/plainLanguage';
+import { PLAIN_ENGLISH_STORAGE_KEY, SIMPLE_VIEW_USER_SET_KEY, resolveSimpleViewDefault } from '@shared/plainLanguage';
 
 export interface UserProfile {
   rep_id: string;
@@ -273,6 +273,7 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.classList.toggle('plain-english-mode', plainEnglish);
+    document.documentElement.classList.toggle('simple-view-layout', plainEnglish);
     try {
       localStorage.setItem(PLAIN_ENGLISH_STORAGE_KEY, plainEnglish ? 'true' : 'false');
     } catch {
@@ -280,7 +281,18 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
     }
   }, [plainEnglish]);
 
-  const togglePlainEnglish = () => setPlainEnglish((v) => !v);
+  const togglePlainEnglish = () => {
+    setPlainEnglish((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem(SIMPLE_VIEW_USER_SET_KEY, 'true');
+        localStorage.setItem(PLAIN_ENGLISH_STORAGE_KEY, next ? 'true' : 'false');
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
 
   // Ensure active identity stays on a marketing plan persona
   useEffect(() => {
@@ -290,6 +302,18 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('hgv_active_rep_id', DEFAULT_MARKETING_REP_ID);
     }
   }, [loadingMetadata, activeRepId]);
+
+  // Role-based Simple View default (reps on, managers off) until user toggles manually
+  useEffect(() => {
+    if (loadingMetadata) return;
+    try {
+      if (localStorage.getItem(SIMPLE_VIEW_USER_SET_KEY) === 'true') return;
+    } catch {
+      return;
+    }
+    const defaultOn = resolveSimpleViewDefault(isManager, activePersonaId);
+    setPlainEnglish(defaultOn);
+  }, [loadingMetadata, isManager, activePersonaId]);
 
   const changeActiveRep = (repId: string) => {
     if (!isMarketingChannelRepId(repId)) return;

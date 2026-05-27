@@ -802,3 +802,27 @@ html.plain-english-mode .nav-tab {
   font-weight: 600;
 }
 
+/* Simple View layout — basics mode spacing & density */
+html.simple-view-layout .simple-view-hero {
+  box-shadow: 0 4px 24px rgba(34, 197, 94, 0.08);
+}
+
+html.simple-view-layout .simple-view-ask button {
+  font-size: 13px;
+}
+
+html.simple-view-layout .glass-card {
+  border-radius: calc(var(--radius) + 2px);
+}
+
+html.simple-view-layout .data-table th {
+  font-size: 10px;
+}
+
+html.simple-view-layout .space-y-8 > * + * {
+  margin-top: 1.75rem !important;
+}
+
+html.simple-view-layout .space-y-6 > * + * {
+  margin-top: 1.25rem !important;
+}

@@ -18,7 +18,15 @@ import { CompInterpretationPanel } from '@/components/comp/CompInterpretationPan
 import { KpiCard } from '@/components/comp/KpiCard';
 import { MarketingPlanAssessmentPanel } from '@/components/comp/MarketingPlanAssessmentPanel';
 import { PageLoadGate } from '@/components/comp/PageLoadGate';
+import {
+  SimpleViewAskButtons,
+  SimpleViewCollapsible,
+  SimpleViewHeroStrip,
+  SimpleViewPayStory,
+  SimpleViewTrafficBar,
+} from '@/components/comp/simpleView';
 import { useAppContext } from '@/context/AppContext';
+import { usePlainLanguage } from '@/hooks/usePlainLanguage';
 import { copilotPromptsForPersona } from '@/data/personaQuestionInventory';
 import { usePlanAssessment } from '@/hooks/usePlanAssessment';
 import { deriveLoadingSteps } from '@/lib/loadingSteps';
@@ -26,6 +34,7 @@ import { LOADING } from '@/lib/loadingStepLabels';
 import { formatNextTierDisplay } from '@/lib/formatNextTier';
 import { formatCurrency, formatPercent } from '@/lib/compFormat';
 import { formatTourCode } from '@shared/normalizeText';
+import { attainmentStatus, penetrationStatus } from '@shared/simpleViewStatus';
 
 const fmtUSD = (n: number) => formatCurrency(n);
 
@@ -75,10 +84,25 @@ interface MarketingWorkspacePayload {
 
 export function MarketingCompensationView() {
   const { activePersonaId, activeRoleTitle, activeRepId, activePeriodId } = useAppContext();
+  const { enabled: simpleView } = usePlainLanguage();
   const [data, setData] = useState<MarketingWorkspacePayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [copilotSeed, setCopilotSeed] = useState<string | undefined>();
   const { assessment, loading: assessmentLoading } = usePlanAssessment('marketing_rep', activePeriodId);
+  const askPrompts = copilotPromptsForPersona('marketing_rep', 6);
+
+  useEffect(() => {
+    try {
+      const seed = sessionStorage.getItem('hgv_copilot_seed');
+      if (seed) {
+        setCopilotSeed(seed);
+        sessionStorage.removeItem('hgv_copilot_seed');
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   if (!activePersonaId || activePersonaId !== 'marketing_rep') return null;
 
@@ -178,6 +202,18 @@ export function MarketingCompensationView() {
   const chargebackAdj = data?.earnings_breakdown.chargebacks ?? 0;
   const repName = data?.rep_name ?? activeRepId;
 
+  const avgPlanAttainment = useMemo(() => {
+    if (!data?.plan_metrics.length) return 0;
+    return data.plan_metrics.reduce((s, m) => s + m.attainment_pct, 0) / data.plan_metrics.length;
+  }, [data]);
+
+  const overallStatus = useMemo(() => {
+    if (!data) return attainmentStatus(0);
+    return penetrationStatus(data.kpis.penetration_pct, data.kpis.penetration_target_pct);
+  }, [data]);
+
+  const nextTierDisplay = data ? formatNextTierDisplay(data.kpis.next_tier_label) : null;
+
   return (
     <PageLoadGate loading={pageLoading} steps={loaderSteps} title="Marketing compensation">
     <div className="animate-fade-in-up space-y-8">
@@ -190,8 +226,9 @@ export function MarketingCompensationView() {
           My Compensation — <span className="text-sapphire-gradient">{activeRoleTitle}</span>
         </h1>
         <p className="mt-2 max-w-3xl text-sm text-muted-foreground leading-relaxed">
-          Welcome back, {repName}. Earnings align to plan weights — Qualified Tours (Owner/NB), FPS Packages, Sales
-          Transactions — grounded on your plan design and industry compensation benchmarks.
+          {simpleView
+            ? `Hey ${repName} — here’s your pay at a glance. Need details? Tap a question below or open any section.`
+            : `Welcome back, ${repName}. Earnings align to plan weights — Qualified Tours (Owner/NB), FPS Packages, Sales Transactions — grounded on your plan design and industry compensation benchmarks.`}
         </p>
       </div>
 
@@ -204,12 +241,106 @@ export function MarketingCompensationView() {
 
       {data && (
         <>
+          {simpleView && (
+            <SimpleViewHeroStrip
+              metrics={[
+                {
+                  label: 'What I earned',
+                  value: fmtUSD(data.kpis.qtd_earnings),
+                  hint: `Net take-home ${fmtUSD(netPayout)}`,
+                },
+                {
+                  label: 'Am I on track?',
+                  value: formatPercent(data.kpis.penetration_pct),
+                  hint: `Goal ${formatPercent(data.kpis.penetration_target_pct)} penetration`,
+                },
+                {
+                  label: "What's next",
+                  value: nextTierDisplay?.headline ?? data.kpis.next_tier_label,
+                  hint: `${data.kpis.next_tier_gap_tours} tours to next level`,
+                },
+              ]}
+              overallStatus={overallStatus}
+              nextStep={
+                data.kpis.next_tier_gap_tours > 0
+                  ? `Run ${data.kpis.next_tier_gap_tours} more qualified tours to reach ${nextTierDisplay?.headline ?? data.kpis.next_tier_label}.`
+                  : 'You are at or above your current tier target — keep your tour quality up.'
+              }
+            />
+          )}
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <KpiCard
+              label="QTD Earnings"
+              value={fmtUSD(data.kpis.qtd_earnings)}
+              subtext={`Sum of plan metrics · Net ${fmtUSD(netPayout)}`}
+              icon={<Wallet size={14} />}
+              trend="positive"
+            />
+            <KpiCard
+              label="Qualified Tours"
+              value={String(data.kpis.qualified_tours)}
+              subtext={`${data.kpis.tours_shown} shown · ${formatPercent(data.kpis.show_rate_pct)}`}
+              icon={<Users size={14} />}
+            />
+            <KpiCard
+              label="Area Penetration"
+              value={formatPercent(data.kpis.penetration_pct)}
+              subtext={`Target ${formatPercent(data.kpis.penetration_target_pct)}`}
+              icon={<Target size={14} />}
+            />
+            <KpiCard
+              label="Next Tier"
+              value={nextTierDisplay?.detail ? `${nextTierDisplay.headline} · ${nextTierDisplay.detail}` : (nextTierDisplay?.headline ?? data.kpis.next_tier_label)}
+              subtext={`${data.kpis.next_tier_gap_tours} tours to unlock`}
+              icon={<TrendingUp size={14} />}
+            />
+          </div>
+
+          {simpleView && (
+            <div className="grid gap-4 md:grid-cols-2">
+              <SimpleViewTrafficBar
+                label="Guest buy rate (penetration)"
+                pct={Math.min(100, (data.kpis.penetration_pct / Math.max(data.kpis.penetration_target_pct, 1)) * 100)}
+                status={penetrationStatus(data.kpis.penetration_pct, data.kpis.penetration_target_pct)}
+                caption={`You are at ${formatPercent(data.kpis.penetration_pct)} vs ${formatPercent(data.kpis.penetration_target_pct)} goal`}
+                valueLabel={formatPercent(data.kpis.penetration_pct)}
+              />
+              <SimpleViewTrafficBar
+                label="Plan goal progress (average)"
+                pct={Math.min(100, avgPlanAttainment)}
+                status={attainmentStatus(avgPlanAttainment)}
+                caption="Average progress across your weighted plan metrics"
+                valueLabel={`${avgPlanAttainment.toFixed(0)}%`}
+              />
+            </div>
+          )}
+
+          <SimpleViewPayStory
+            repId={activeRepId}
+            periodId={activePeriodId}
+            roleTitle={activeRoleTitle}
+            channel="marketing"
+            insightsContext={insightsContext}
+          />
+
+          <SimpleViewAskButtons prompts={askPrompts} onSelect={setCopilotSeed} />
+
           {assessment && (
-            <MarketingPlanAssessmentPanel assessment={assessment} />
+            <SimpleViewCollapsible
+              title="Full plan rules & weights"
+              subtitle="Official plan assessment — open if you want the fine print"
+            >
+              <MarketingPlanAssessmentPanel assessment={assessment} />
+            </SimpleViewCollapsible>
           )}
 
           <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
             <div className="space-y-6 lg:col-span-2">
+              <SimpleViewCollapsible
+                title="Where my money came from"
+                subtitle="Plan metric earnings table"
+              >
               <div className="glass-card" style={{ padding: '1.5rem' }}>
                 <div className="mb-4 flex items-center gap-2">
                   <Wallet size={15} color="var(--primary)" />
@@ -257,7 +388,12 @@ export function MarketingCompensationView() {
                   {chargebackAdj !== 0 ? ` after chargebacks ${fmtUSD(chargebackAdj)}` : ''}.
                 </div>
               </div>
+              </SimpleViewCollapsible>
 
+              <SimpleViewCollapsible
+                title="How market pay compares to yours"
+                subtitle="Industry benchmark impact on your statement"
+              >
               <CompStatementImpactPanel
                 repId={activeRepId}
                 periodId={activePeriodId}
@@ -265,7 +401,12 @@ export function MarketingCompensationView() {
                 roleKey="marketing_rep"
                 insightsContext={data.insights_context}
               />
+              </SimpleViewCollapsible>
 
+              <SimpleViewCollapsible
+                title="Tour activity & credits"
+                subtitle={`${data.tours.length} tours — tap to see the full ledger`}
+              >
               <div className="glass-card hgv-card-hover overflow-hidden p-6">
                 <div className="mb-4 flex items-center gap-2">
                   <CalendarDays size={15} className="text-[var(--gold)]" aria-hidden />
@@ -317,7 +458,9 @@ export function MarketingCompensationView() {
                   </table>
                 </div>
               </div>
+              </SimpleViewCollapsible>
 
+              {!simpleView && (
               <CompInterpretationPanel
                 endpoint="/api/comp/marketing/tour-insights"
                 insightsContext={tourInterpretationContext}
@@ -328,7 +471,12 @@ export function MarketingCompensationView() {
                 llmLabel={LOADING.aiTourBrief}
                 enabled={!!tourInterpretationContext}
               />
+              )}
 
+              <SimpleViewCollapsible
+                title="Chargebacks & upcoming arrivals"
+                subtitle="Money clawed back and tours on the calendar"
+              >
               <div className="grid gap-6 md:grid-cols-2">
                 <div className="glass-card hgv-card-hover space-y-3 p-6">
                   <div className="mb-1 flex items-center gap-2">
@@ -386,37 +534,11 @@ export function MarketingCompensationView() {
                   </div>
                 </div>
               </div>
+              </SimpleViewCollapsible>
             </div>
 
+            {!simpleView && (
             <div className="space-y-4 lg:sticky lg:top-4">
-              <KpiCard
-                label="QTD Earnings"
-                value={fmtUSD(data.kpis.qtd_earnings)}
-                subtext={`Sum of plan metrics · Net ${fmtUSD(netPayout)}`}
-                icon={<Wallet size={14} />}
-                trend="positive"
-              />
-              <KpiCard
-                label="Qualified Tours"
-                value={String(data.kpis.qualified_tours)}
-                subtext={`${data.kpis.tours_shown} shown · ${formatPercent(data.kpis.show_rate_pct)}`}
-                icon={<Users size={14} />}
-              />
-              <KpiCard
-                label="Area Penetration"
-                value={formatPercent(data.kpis.penetration_pct)}
-                subtext={`Target ${formatPercent(data.kpis.penetration_target_pct)}`}
-                icon={<Target size={14} />}
-              />
-              <KpiCard
-                label="Next Tier"
-                value={(() => {
-                  const tier = formatNextTierDisplay(data.kpis.next_tier_label);
-                  return tier.detail ? `${tier.headline} · ${tier.detail}` : tier.headline;
-                })()}
-                subtext={`${data.kpis.next_tier_gap_tours} tours to unlock`}
-                icon={<TrendingUp size={14} />}
-              />
               <PayMixMarketBanner
                 roleKey="marketing_rep"
                 basePct={data.pay_mix.base_pct}
@@ -442,6 +564,33 @@ export function MarketingCompensationView() {
                 insightsContext={insightsContext}
               />
             </div>
+            )}
+
+            {simpleView && (
+            <div className="space-y-4 lg:col-span-1">
+              <SimpleViewCollapsible title="Pay mix vs market" subtitle="Base vs bonus split and market gap">
+                <PayMixMarketBanner
+                  roleKey="marketing_rep"
+                  basePct={data.pay_mix.base_pct}
+                  variablePct={data.pay_mix.variable_pct}
+                  tccGapPct={data.market_position.tcc_gap_vs_market_pct}
+                />
+                <div className="mt-4">
+                  <CompInterpretationPanel
+                    endpoint="/api/comp/pay-mix/insights"
+                    insightsContext={payMixContext}
+                    roleTitle={activeRoleTitle}
+                    title="Pay Mix Interpretation"
+                    subtitle="What your base/variable split means for statement volatility."
+                    contextLabel={LOADING.aiPayMix}
+                    llmLabel={LOADING.aiPayMixBrief}
+                    enabled={!!payMixContext}
+                    compact
+                  />
+                </div>
+              </SimpleViewCollapsible>
+            </div>
+            )}
           </div>
 
           <CompCopilot
@@ -450,7 +599,9 @@ export function MarketingCompensationView() {
             dataContext={dataContext}
             storageKey={`mkt_rep_comp_${activeRepId}`}
             autoInsight={false}
-            examplePrompts={copilotPromptsForPersona('marketing_rep', 5)}
+            initialInput={copilotSeed}
+            initialInputBehavior="submit"
+            examplePrompts={askPrompts.slice(0, 5)}
           />
 
           <p className="flex items-center gap-2 text-[11px] text-muted-foreground">

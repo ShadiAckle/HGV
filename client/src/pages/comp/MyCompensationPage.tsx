@@ -9,7 +9,7 @@ import {
   Wallet,
   Sparkles,
 } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { deriveLoadingSteps } from '@/lib/loadingSteps';
 import { LOADING } from '@/lib/loadingStepLabels';
 import { formatSalesBenchmarkFacts } from '@shared/compStatementImpact';
@@ -22,11 +22,20 @@ import { copilotPromptsForPersona } from '@/data/personaQuestionInventory';
 import { formatCurrency, formatPercent, formatQueryError } from '@/lib/compFormat';
 import { useAppContext } from '@/context/AppContext';
 import { PageLoadGate } from '@/components/comp/PageLoadGate';
+import {
+  SimpleViewAskButtons,
+  SimpleViewCollapsible,
+  SimpleViewHeroStrip,
+  SimpleViewPayStory,
+  SimpleViewTrafficBar,
+} from '@/components/comp/simpleView';
 import { MarketingCompensationView } from './MarketingCompensationView';
 import { ManagerCompensationView } from './ManagerCompensationView';
+import { usePlainLanguage } from '@/hooks/usePlainLanguage';
+import { attainmentStatus } from '@shared/simpleViewStatus';
 
 export function MyCompensationPage() {
-  const { activeRepId, activePeriodId, metadata, isMarketingChannel, activePersonaId, activeRoleTitle, isManager } = useAppContext();
+  const { isMarketingChannel, activePersonaId, isManager } = useAppContext();
 
   if (isMarketingChannel && activePersonaId === 'marketing_rep') {
     return <MarketingCompensationView />;
@@ -35,6 +44,27 @@ export function MyCompensationPage() {
   if (isManager) {
     return <ManagerCompensationView />;
   }
+
+  return <SalesRepCompensationView />;
+}
+
+function SalesRepCompensationView() {
+  const { activeRepId, activePeriodId, metadata, activeRoleTitle } = useAppContext();
+  const { enabled: simpleView } = usePlainLanguage();
+  const [copilotSeed, setCopilotSeed] = useState<string | undefined>();
+  const askPrompts = copilotPromptsForPersona('sales_executive', 6);
+
+  useEffect(() => {
+    try {
+      const seed = sessionStorage.getItem('hgv_copilot_seed');
+      if (seed) {
+        setCopilotSeed(seed);
+        sessionStorage.removeItem('hgv_copilot_seed');
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const queryParams = useMemo(() => ({
     rep_id: sql.string(activeRepId),
@@ -228,7 +258,9 @@ export function MyCompensationPage() {
         </h1>
         {kpi?.rep_name && (
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
-            Welcome back, {kpi.rep_name}. Live quota, earnings, and deal credits from the warehouse — with AI guidance on how to maximize payout.
+            {simpleView
+              ? `Hey ${kpi.rep_name} — your pay and goal progress below. Tap a question if anything looks confusing.`
+              : `Welcome back, ${kpi.rep_name}. Live quota, earnings, and deal credits from the warehouse — with AI guidance on how to maximize payout.`}
           </p>
         )}
       </div>
@@ -259,6 +291,30 @@ export function MyCompensationPage() {
 
       {kpi && breakdown && (
         <div className="space-y-6">
+
+          {simpleView && (
+            <SimpleViewHeroStrip
+              metrics={[
+                {
+                  label: 'What I earned',
+                  value: formatCurrency(kpi.current_earnings),
+                  hint: `Paid so far ${formatCurrency(kpi.paid_to_date)}`,
+                },
+                {
+                  label: 'Am I on track?',
+                  value: formatPercent(kpi.quota_attainment_pct),
+                  hint: `${formatCurrency(kpi.credited_amount)} of ${formatCurrency(kpi.quota_amount)} goal`,
+                },
+                {
+                  label: "What's next",
+                  value: formatPercent(kpi.next_tier_threshold_pct),
+                  hint: `${formatCurrency(kpi.next_tier_gap_amount)} more to next pay bump`,
+                },
+              ]}
+              overallStatus={attainmentStatus(attainment)}
+              nextStep={`Close another ${formatCurrency(kpi.next_tier_gap_amount)} in sales credit to boost your rate to ${formatPercent(nextTier)}.`}
+            />
+          )}
 
           {/* ── KPI Grid ── */}
           <div className="grid grid-cols-[repeat(auto-fit,minmax(240px,1fr))] gap-4 animate-stagger-1">
@@ -291,12 +347,37 @@ export function MyCompensationPage() {
             />
           </div>
 
+          {simpleView && (
+            <SimpleViewTrafficBar
+              label="Progress toward your sales goal"
+              pct={Math.min(100, attainment)}
+              status={attainmentStatus(attainment)}
+              caption={`${formatCurrency(kpi.credited_amount)} credited of ${formatCurrency(kpi.quota_amount)} quota`}
+              valueLabel={formatPercent(kpi.quota_attainment_pct)}
+            />
+          )}
+
+          <SimpleViewPayStory
+            repId={activeRepId}
+            periodId={activePeriodId}
+            roleTitle={repTitle}
+            channel="sales"
+            insightsContext={insightsContext}
+            enabled={!!kpi && !!breakdown}
+          />
+
+          <SimpleViewAskButtons prompts={askPrompts} onSelect={setCopilotSeed} />
+
           {/* ── Dashboard Content ── */}
           <div className="grid gap-6 lg:grid-cols-3 lg:items-start">
               
               {/* Left 2 Columns: Financials and Charts */}
               <div className="flex flex-col gap-6 lg:col-span-2">
 
+                <SimpleViewCollapsible
+                  title="How market standards affect your pay"
+                  subtitle="Benchmark impact on your comp statement"
+                >
                 <CompStatementImpactPanel
                   repId={activeRepId}
                   periodId={activePeriodId}
@@ -305,6 +386,7 @@ export function MyCompensationPage() {
                   insightsContext={insightsContext}
                   enabled={!!kpi && !!breakdown}
                 />
+                </SimpleViewCollapsible>
 
                 <div className="grid gap-6 md:grid-cols-2">
                   <div className="glass-card hgv-card-hover flex flex-col gap-4 !py-7">
@@ -362,7 +444,15 @@ export function MyCompensationPage() {
                     </div>
 
                     <div className="flex min-h-[110px] flex-1 flex-col justify-end">
-                      {monthlyChartData.length === 0 ? (
+                      {simpleView ? (
+                        <SimpleViewTrafficBar
+                          label="Monthly sales toward goal"
+                          pct={Math.min(100, attainment)}
+                          status={attainmentStatus(attainment)}
+                          caption={`Period total ${formatCurrency(monthlyChartData.reduce((sum, d) => sum + d.value, 0))}`}
+                          valueLabel={formatPercent(kpi.quota_attainment_pct)}
+                        />
+                      ) : monthlyChartData.length === 0 ? (
                         <p className="py-8 text-center text-xs text-muted-foreground">
                           No monthly attainment rows for this rep.
                         </p>
@@ -387,16 +477,19 @@ export function MyCompensationPage() {
                           })}
                         </div>
                       )}
+                      {!simpleView && (
                       <div className="flex justify-between border-t border-border pt-1.5 text-[9px] text-muted-foreground">
                         <span>Period credited sales:</span>
                         <span className="font-bold text-foreground">
                           {formatCurrency(monthlyChartData.reduce((sum, d) => sum + d.value, 0))}
                         </span>
                       </div>
+                      )}
                     </div>
                   </div>
                 </div>
 
+                {!simpleView && (
                 <CompInterpretationPanel
                   endpoint="/api/comp/rep/earnings-interpretation"
                   insightsContext={earningsSnapshotContext}
@@ -407,6 +500,7 @@ export function MyCompensationPage() {
                   llmLabel={LOADING.aiEarningsBrief}
                   enabled={!!earningsSnapshotContext}
                 />
+                )}
 
                 <div className="glass-card flex items-center gap-3 border-l-[3px] border-l-primary !py-5 animate-stagger-2">
                   <TrendingUp size={16} className="shrink-0 text-primary" aria-hidden />
@@ -417,6 +511,10 @@ export function MyCompensationPage() {
                   </p>
                 </div>
 
+                <SimpleViewCollapsible
+                  title="Recent contracts & credits"
+                  subtitle="Full deal ledger for this period"
+                >
                 <div className="glass-card hgv-card-hover flex flex-col gap-4 !py-7">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -465,12 +563,14 @@ export function MyCompensationPage() {
                     </table>
                   </div>
                 </div>
+                </SimpleViewCollapsible>
 
               </div>
 
-              {/* Right Column: AI Insights & copilot */}
+              {/* Right Column: copilot (AI story lives above when Simple View) */}
               <div className="flex flex-col gap-6 lg:sticky lg:top-4">
 
+                {!simpleView && (
                 <RepAiInsightsPanel
                   repId={activeRepId}
                   periodId={activePeriodId}
@@ -479,6 +579,7 @@ export function MyCompensationPage() {
                   insightsContext={insightsContext}
                   enabled={!!kpi && !!breakdown}
                 />
+                )}
 
                 {/* Copilot Sidebar */}
                 <div className="glass-card hgv-card-hover overflow-hidden !p-4">
@@ -490,7 +591,9 @@ export function MyCompensationPage() {
                     contextError={error}
                     storageKey={`copilot_${activeRepId}`}
                     autoInsight={false}
-                    examplePrompts={copilotPromptsForPersona('sales_executive', 4)}
+                    initialInput={copilotSeed}
+                    initialInputBehavior="submit"
+                    examplePrompts={askPrompts.slice(0, 4)}
                   />
                 </div>
 

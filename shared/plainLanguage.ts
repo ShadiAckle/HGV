@@ -4,6 +4,15 @@
  */
 
 export const PLAIN_ENGLISH_STORAGE_KEY = 'hgv_plain_english_mode';
+/** Set when the user manually toggles Simple View — skips role-based default. */
+export const SIMPLE_VIEW_USER_SET_KEY = 'hgv_simple_view_user_set';
+
+export function resolveSimpleViewDefault(isManager: boolean, personaId: string | null): boolean {
+  if (isManager || personaId === 'marketing_manager' || personaId === 'marketing_director') {
+    return false;
+  }
+  return personaId === 'marketing_rep' || personaId === null;
+}
 
 /** LLM instruction block appended to every insight/copilot prompt when field mode is on. */
 export const PLAIN_ENGLISH_LLM_BLOCK = `
