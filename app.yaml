@@ -1,0 +1,12 @@
+command:
+  - node
+  - dist/server.js
+env:
+  - name: NODE_ENV
+    value: production
+  - name: FLASK_RUN_HOST
+    value: "0.0.0.0"
+  - name: DATABRICKS_WAREHOUSE_ID
+    valueFrom: sql-warehouse
+  - name: DATABRICKS_SERVING_ENDPOINT_NAME
+    valueFrom: serving-endpoint

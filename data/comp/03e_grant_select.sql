@@ -1,0 +1,2 @@
+GRANT SELECT ON SCHEMA workspace.hgv_comp TO `d8d67f27-1896-4549-9351-e7b53a9df800`
+

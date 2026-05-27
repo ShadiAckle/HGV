@@ -1,0 +1,7 @@
+{
+  "description": "HGV Sales Compensation Assistant — governed comp semantic layer + LLM on Model Serving",
+  "user_api_scopes": [
+    "sql",
+    "model-serving"
+  ]
+}
