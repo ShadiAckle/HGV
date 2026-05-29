@@ -3,6 +3,7 @@ import {
 } from '@databricks/appkit-ui/react';
 import { ArrowRightLeft, Calculator, CheckCircle2, Plus, RotateCcw, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { buildIndustryGapAssessment, getGapStatus, normalizeIndustryBenchmarkRows } from '@shared/benchmarkGrounding';
 import { CompCopilot } from '@/components/comp/CompCopilot';
 import { CompInterpretationPanel } from '@/components/comp/CompInterpretationPanel';
@@ -45,24 +46,37 @@ interface SliderProps {
   step: number;
   unit?: string;
   color?: string;
+  helpText?: string;
   onChange: (v: number) => void;
 }
 
-function Slider({ id, label, value, min, max, step, unit = '%', color = 'bg-primary', onChange }: SliderProps) {
+const SLIDER_HELP = {
+  quota:
+    'Moves every rep\'s sales goal up or down. Higher quota = harder to hit accelerators but lowers total comp cost. After saving, compare "Expected performance" and "Budget impact" in the matrix below.',
+  commission:
+    'Changes the base commission % paid on closed deals. Higher rate increases rep pay and budget cost. Check projected payouts in the Comparison Matrix and the industry benchmark card.',
+  tourVolume:
+    'Models more or fewer marketing tours flowing to the field. Affects tour-credit pay and downstream sales volume. Review tour-related rows in the matrix and ask the Scenario Planning Assistant for a plain summary.',
+} as const;
+
+function Slider({ id, label, value, min, max, step, unit = '%', color = 'bg-primary', helpText, onChange }: SliderProps) {
   const pct = ((value - min) / (max - min)) * 100;
   return (
-    <div className="space-y-1.5">
+    <div
+      className="rounded-xl border space-y-3"
+      style={{ padding: '1.25rem 1.375rem', borderColor: '#e2e8f0', background: '#fafbfc' }}
+    >
       <div className="flex items-center justify-between text-xs">
-        <label htmlFor={id} className="font-medium text-foreground/80">{label}</label>
-        <span className={`rounded-full px-2 py-0.5 font-semibold tabular-nums ${
+        <label htmlFor={id} className="font-semibold text-foreground">{label}</label>
+        <span className={`rounded-full px-2.5 py-0.5 font-semibold tabular-nums ${
           value > 0 ? 'bg-primary/10 text-primary' : value < 0 ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground'
         }`}>
           {value > 0 ? '+' : ''}{value}{unit}
         </span>
       </div>
-      <div className="relative h-2 rounded-full bg-muted">
+      <div className="relative h-2.5 rounded-full bg-muted/80">
         <div
-          className={`absolute left-0 top-0 h-2 rounded-full ${color} transition-all`}
+          className={`absolute left-0 top-0 h-2.5 rounded-full ${color} transition-all`}
           style={{ width: `${pct}%` }}
         />
         <input
@@ -73,7 +87,7 @@ function Slider({ id, label, value, min, max, step, unit = '%', color = 'bg-prim
           step={step}
           value={value}
           onChange={(e) => onChange(Number(e.target.value))}
-          className="absolute inset-0 h-2 w-full cursor-pointer opacity-0"
+          className="absolute inset-0 h-2.5 w-full cursor-pointer opacity-0"
         />
       </div>
       <div className="flex justify-between text-[9px] text-muted-foreground tabular-nums">
@@ -81,6 +95,11 @@ function Slider({ id, label, value, min, max, step, unit = '%', color = 'bg-prim
         <span>0</span>
         <span>+{max}{unit}</span>
       </div>
+      {helpText && (
+        <p className="text-[11px] leading-relaxed text-muted-foreground border-t pt-3" style={{ borderColor: '#e8edf2' }}>
+          {helpText}
+        </p>
+      )}
     </div>
   );
 }
@@ -113,7 +132,11 @@ function ScenarioTag({ s }: { s: ScenarioRecord }) {
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export function CompAnalysisPage() {
-  const { activePeriodId } = useAppContext();
+  const { activePeriodId, activePersonaId } = useAppContext();
+  const isMarketingDirector = activePersonaId === 'marketing_director';
+  const isMarketingManager = activePersonaId === 'marketing_manager';
+  /** Director + sales leaders: quota & commission. Marketing manager: tour volume only. */
+  const canAdjustQuotaAndCommission = !isMarketingManager;
   const benchmarkPeriodId = activePeriodId || '2026-Q2';
   const [scenarios, setScenarios] = useState<ScenarioRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -247,6 +270,27 @@ export function CompAnalysisPage() {
 
   useEffect(() => { void refreshAll(); }, [refreshAll]);
 
+  useEffect(() => {
+    if (!showCreate || !isMarketingManager) return;
+    setForm((f) => ({
+      ...f,
+      quota_change_pct: 0,
+      commission_rate_pct: 6.0,
+      bonus_rate_change_pct: 0,
+      accelerator_change_pct: 0,
+      conversion_rate_change_pct: 0,
+    }));
+  }, [showCreate, isMarketingManager]);
+
+  useEffect(() => {
+    if (!showCreate) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [showCreate]);
+
   const pageLoading = loading || benchmarksLoading;
   const pageError = error || benchmarksError;
 
@@ -308,18 +352,20 @@ export function CompAnalysisPage() {
     setCreating(true);
     setCreateError(null);
     try {
+      const quota = isMarketingManager ? 0 : form.quota_change_pct;
+      const commission = isMarketingManager ? 6.0 : form.commission_rate_pct;
       const res = await fetch('/api/comp/scenarios', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           scenario_id: id,
           scenario_name: form.name.trim(),
-          quota_change_pct: form.quota_change_pct,
-          commission_rate_pct: form.commission_rate_pct,
-          bonus_rate_change_pct: form.bonus_rate_change_pct,
-          accelerator_change_pct: form.accelerator_change_pct,
+          quota_change_pct: quota,
+          commission_rate_pct: commission,
+          bonus_rate_change_pct: 0,
+          accelerator_change_pct: 0,
           tour_volume_change_pct: form.tour_volume_change_pct,
-          conversion_rate_change_pct: form.conversion_rate_change_pct,
+          conversion_rate_change_pct: 0,
         }),
       });
       if (!res.ok) {
@@ -401,20 +447,22 @@ export function CompAnalysisPage() {
 
   // Live projection preview (client-side formula mirrors server)
   const preview = useMemo(() => {
+    const quota = isMarketingManager ? 0 : form.quota_change_pct;
+    const commission = isMarketingManager ? 6.0 : form.commission_rate_pct;
     const proj = projectScenario(
-      form.quota_change_pct,
-      form.commission_rate_pct,
-      form.bonus_rate_change_pct,
-      form.accelerator_change_pct,
+      quota,
+      commission,
+      0,
+      0,
       form.tour_volume_change_pct,
-      form.conversion_rate_change_pct,
+      0,
     );
     return { projected: proj.projected_payouts, impact: proj.budget_impact, perf: proj.expected_performance_pct };
-  }, [form]);
+  }, [form, isMarketingManager]);
 
   return (
     <>
-      <div className="space-y-8 animate-fade-in-up">
+      <div className="space-y-6 animate-fade-in-up hgv-scenario-modeler">
 
       {pageLoading && (
         <LuxeDbLoader loading steps={loaderSteps} title="Compensation analysis" />
@@ -435,7 +483,10 @@ export function CompAnalysisPage() {
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
           <div className="space-y-6">
             {/* Scenario Library */}
-            <div className="glass-card space-y-4" style={{ padding: '2.25rem 2rem' }}>
+            <div
+              className="rounded-2xl border bg-white space-y-4 shadow-sm"
+              style={{ padding: '1.75rem 1.5rem', borderColor: '#e2e8f0' }}
+            >
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <h4 className="text-sm font-bold text-foreground">Scenario Library</h4>
@@ -458,7 +509,7 @@ export function CompAnalysisPage() {
                     id="btn-add-scenario"
                     className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-[11px] font-bold text-primary-foreground shadow-sm shadow-primary/30 hover:bg-primary/90 hover:scale-[1.02] active:scale-[0.98] transition-all"
                   >
-                    <Plus className="h-3.5 w-3.5" /> New Scenario
+                    <Plus className="h-3.5 w-3.5" /> New Model
                   </button>
                 </div>
               </div>
@@ -532,7 +583,10 @@ export function CompAnalysisPage() {
 
             {/* Comparison Matrix */}
             {selectedScenarios.length > 0 && (
-              <div className="glass-card space-y-4" style={{ padding: '2.25rem 2rem' }}>
+              <div
+                className="rounded-2xl border bg-white space-y-4 shadow-sm"
+                style={{ padding: '1.75rem 1.5rem', borderColor: '#e2e8f0' }}
+              >
                 <div className="space-y-0.5">
                   <h4 className="text-sm font-bold flex items-center gap-2 text-foreground">
                     <ArrowRightLeft className="h-4 w-4 text-primary" />
@@ -949,36 +1003,48 @@ export function CompAnalysisPage() {
       )}
       </div>
 
-      {/* ─── Create Scenario Modal ──────────────────────────────────────────── */}
-      {showCreate && (
+      {/* ─── Create Scenario Modal (portal — stays centered on screen) ─── */}
+      {showCreate && createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md"
+          className="fixed inset-0 z-[200] overflow-y-auto"
+          style={{ background: 'rgba(10, 37, 64, 0.55)' }}
           onClick={(e) => { if (e.target === e.currentTarget) setShowCreate(false); }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-scenario-title"
         >
-          <div className="animate-fade-in mx-4 w-full max-w-lg rounded-3xl border border-glass-border bg-card/80 backdrop-blur-xl shadow-2xl overflow-hidden">
-            <div className="border-b border-glass-border bg-gradient-to-r from-primary/10 to-transparent" style={{ padding: '1.5rem 2rem' }}>
-              <div className="flex items-center justify-between">
+          <div className="flex min-h-full items-center justify-center p-4 sm:p-8">
+          <div
+            className="animate-fade-in w-full max-w-lg rounded-2xl border shadow-2xl overflow-hidden"
+            style={{ background: '#fff', borderColor: '#e2e8f0', maxHeight: 'min(90vh, 880px)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="border-b" style={{ padding: '1.25rem 1.5rem', borderColor: '#e2e8f0', background: 'linear-gradient(90deg, #f0f6ff, #fff)' }}>
+              <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-base font-extrabold text-foreground">Create New Scenario</h3>
-                  <p className="text-[11px] font-medium text-muted-foreground mt-0.5">
-                    Adjust levers below. Projections are calculated automatically and saved to{' '}
-                    <code className="rounded-md bg-primary/10 text-primary px-1.5 text-[10px] font-mono">workspace.hgv_comp</code>.
+                  <h3 id="create-scenario-title" className="text-base font-bold text-foreground">Create New Scenario</h3>
+                  <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+                    {isMarketingManager
+                      ? 'Adjust tour volume to model marketing flow. Results appear in the comparison matrix below after you save.'
+                      : isMarketingDirector
+                        ? 'Set quota, commission, and tour levers. Projections update live — save to compare in the matrix.'
+                        : 'Adjust plan levers below. Save to compare scenarios side-by-side.'}
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setShowCreate(false)}
-                  className="rounded-xl p-1.5 text-muted-foreground hover:bg-muted/30 hover:text-foreground transition-colors"
+                  className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted/40 transition-colors shrink-0"
+                  aria-label="Close"
                 >
                   <X className="h-4 w-4" />
                 </button>
               </div>
             </div>
 
-            <form onSubmit={handleCreate} className="space-y-5" style={{ padding: '2rem' }}>
-              {/* Scenario name */}
-              <div className="space-y-1.5">
-                <label htmlFor="scenario-name" className="text-xs font-bold text-foreground/80">
+            <form onSubmit={handleCreate} className="overflow-y-auto space-y-5" style={{ padding: '1.5rem', maxHeight: 'calc(90vh - 120px)' }}>
+              <div className="space-y-2">
+                <label htmlFor="scenario-name" className="text-xs font-bold text-foreground">
                   Scenario name <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -987,95 +1053,65 @@ export function CompAnalysisPage() {
                   type="text"
                   value={form.name}
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  placeholder="e.g. Q2 Aggressive Growth Plan"
-                  className="w-full rounded-xl border border-glass-border bg-card/40 px-3 py-2.5 text-sm font-medium outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30 transition-all"
+                  placeholder="e.g. Q2 Tour Push Plan"
+                  className="w-full rounded-xl border px-3 py-2.5 text-sm font-medium outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30"
+                  style={{ borderColor: '#dde3ea' }}
                   required
                   maxLength={48}
                 />
               </div>
 
-              {/* Levers */}
-              <div className="space-y-5">
-                <Slider
-                  id="quota-change"
-                  label="Quota adjustment"
-                  value={form.quota_change_pct}
-                  min={-20} max={30} step={1}
-                  color="bg-primary"
-                  onChange={(v) => setForm((f) => ({ ...f, quota_change_pct: v }))}
-                />
-                <Slider
-                  id="commission-rate"
-                  label="Commission rate (baseline: 6%)"
-                  value={form.commission_rate_pct}
-                  min={3} max={12} step={0.5}
-                  unit="%"
-                  color="bg-emerald-500"
-                  onChange={(v) => setForm((f) => ({ ...f, commission_rate_pct: v }))}
-                />
-                <Slider
-                  id="bonus-rate"
-                  label="Bonus rate change"
-                  value={form.bonus_rate_change_pct}
-                  min={-30} max={30} step={5}
-                  color="bg-amber-500"
-                  onChange={(v) => setForm((f) => ({ ...f, bonus_rate_change_pct: v }))}
-                />
-                <Slider
-                  id="accelerator-change"
-                  label="Accelerator multiplier change"
-                  value={form.accelerator_change_pct}
-                  min={-20} max={50} step={5}
-                  color="bg-purple-500"
-                  onChange={(v) => setForm((f) => ({ ...f, accelerator_change_pct: v }))}
-                />
+              <div className="space-y-4">
+                {canAdjustQuotaAndCommission && (
+                  <>
+                    <Slider
+                      id="quota-change"
+                      label="Quota adjustment"
+                      value={form.quota_change_pct}
+                      min={-20} max={30} step={1}
+                      color="bg-primary"
+                      helpText={SLIDER_HELP.quota}
+                      onChange={(v) => setForm((f) => ({ ...f, quota_change_pct: v }))}
+                    />
+                    <Slider
+                      id="commission-rate"
+                      label="Commission rate (baseline: 6%)"
+                      value={form.commission_rate_pct}
+                      min={3} max={12} step={0.5}
+                      unit="%"
+                      color="bg-emerald-500"
+                      helpText={SLIDER_HELP.commission}
+                      onChange={(v) => setForm((f) => ({ ...f, commission_rate_pct: v }))}
+                    />
+                  </>
+                )}
                 <Slider
                   id="tour-volume-change"
                   label="Tour volume adjustment"
                   value={form.tour_volume_change_pct}
                   min={-30} max={50} step={5}
                   color="bg-primary"
+                  helpText={SLIDER_HELP.tourVolume}
                   onChange={(v) => setForm((f) => ({ ...f, tour_volume_change_pct: v }))}
                 />
-                <Slider
-                  id="conversion-rate-change"
-                  label="Tour-to-FPS conversion adjustment"
-                  value={form.conversion_rate_change_pct}
-                  min={-25} max={40} step={5}
-                  color="bg-emerald-500"
-                  onChange={(v) => setForm((f) => ({ ...f, conversion_rate_change_pct: v }))}
-                />
-                
-                {/* Director+ NOI Weight Slider */}
-                <Slider
-                  id="director-noi-weight"
-                  label="Director+ NOI Metric Weight (baseline: 30%)"
-                  value={form.director_noi_weight}
-                  min={0} max={100} step={5}
-                  color="bg-purple-500"
-                  onChange={(v) => setForm((f) => ({ ...f, director_noi_weight: v }))}
-                />
-
-                {/* Strategic Annotation / Intent */}
-                <div className="space-y-1.5">
-                  <label htmlFor="create-scenario-annotation" className="text-xs font-bold text-foreground/80">
-                    Strategic Intent & Annotation
-                  </label>
-                  <textarea
-                    id="create-scenario-annotation"
-                    value={form.annotation}
-                    onChange={(e) => setForm((f) => ({ ...f, annotation: e.target.value }))}
-                    placeholder="e.g. Executive strategy recommendation: aligns pay mix and targets NOI to protect margins."
-                    rows={2}
-                    className="w-full rounded-xl border border-glass-border bg-card/40 px-3 py-2 text-xs font-medium outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/30 transition-all text-foreground resize-none leading-relaxed"
-                  />
-                </div>
               </div>
 
-              {/* Live preview */}
-              <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/8 to-transparent space-y-2" style={{ padding: '1.25rem 1.5rem' }}>
-                <p className="text-[11px] font-extrabold text-primary uppercase tracking-widest flex items-center gap-1.5">
-                  <Calculator className="h-3 w-3" /> Live Projection Preview
+              <div
+                className="rounded-xl border text-[11px] leading-relaxed text-muted-foreground space-y-2"
+                style={{ padding: '1rem 1.125rem', borderColor: '#dbeafe', background: '#f8fbff' }}
+              >
+                <p className="font-bold text-foreground text-xs">How to view your results</p>
+                <ol className="list-decimal pl-4 space-y-1">
+                  <li>Click <strong>Create &amp; Save Scenario</strong> — your model is stored in the scenario library.</li>
+                  <li>Check the box next to your new scenario (up to 4 at once).</li>
+                  <li>Scroll to the <strong>Comparison Matrix</strong> for projected pay and budget impact.</li>
+                  <li>Use the <strong>Scenario Planning Assistant</strong> on the right to ask what the numbers mean.</li>
+                </ol>
+              </div>
+
+              <div className="rounded-xl border border-primary/20 bg-primary/5 space-y-2" style={{ padding: '1.125rem 1.25rem' }}>
+                <p className="text-[11px] font-bold text-primary uppercase tracking-wide flex items-center gap-1.5">
+                  <Calculator className="h-3 w-3" /> Live preview
                 </p>
                 <div className="grid grid-cols-3 gap-3 text-xs font-semibold">
                   <div>
@@ -1099,11 +1135,12 @@ export function CompAnalysisPage() {
                 <p className="text-xs font-semibold text-rose-500">{createError}</p>
               )}
 
-              <div className="flex justify-end gap-2 pt-1">
+              <div className="flex justify-end gap-2 pt-1 pb-1">
                 <button
                   type="button"
                   onClick={() => setShowCreate(false)}
-                  className="rounded-xl border border-glass-border bg-muted/20 px-4 py-2 text-sm font-semibold text-muted-foreground hover:bg-muted/40 transition-colors"
+                  className="rounded-xl border px-4 py-2 text-sm font-semibold text-muted-foreground hover:bg-muted/30"
+                  style={{ borderColor: '#dde3ea' }}
                 >
                   Cancel
                 </button>
@@ -1111,14 +1148,17 @@ export function CompAnalysisPage() {
                   type="submit"
                   disabled={creating || !form.name.trim()}
                   id="btn-create-scenario-submit"
-                  className="rounded-xl bg-primary px-5 py-2 text-sm font-bold text-primary-foreground shadow-sm shadow-primary/30 hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed hover:scale-[1.02] active:scale-[0.98] transition-all"
+                  className="rounded-xl px-5 py-2 text-sm font-bold text-white shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{ background: '#0a2540' }}
                 >
-                  {creating ? 'Saving to Unity Catalog…' : 'Create & Save Scenario'}
+                  {creating ? 'Saving…' : 'Create & Save Scenario'}
                 </button>
               </div>
             </form>
           </div>
-        </div>
+          </div>
+        </div>,
+        document.body,
       )}
     </>
   );

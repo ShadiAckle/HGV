@@ -826,3 +826,11 @@ html.simple-view-layout .space-y-8 > * + * {
 html.simple-view-layout .space-y-6 > * + * {
   margin-top: 1.25rem !important;
 }
+
+/* HGV Strategy Control Room — corporate dashboard alignment */
+.hgv-strategy-room .glass-card,
+.hgv-scenario-modeler .glass-card {
+  border-color: #e2e8f0;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(10, 37, 64, 0.06);
+}
