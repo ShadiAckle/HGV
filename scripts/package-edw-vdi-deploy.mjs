@@ -16,17 +16,17 @@ const COMP_CATALOG = process.env.COMP_CATALOG ?? 'edw_dev_hris';
 const COMP_SCHEMA = process.env.COMP_SCHEMA ?? 'hgv_comp';
 const COMP_UC = `${COMP_CATALOG}.${COMP_SCHEMA}`;
 
-const required = ['dist/server.js', 'client/dist/index.html', 'app.yaml', 'package.json'];
-for (const rel of required) {
-  if (!existsSync(join(root, rel))) {
-    console.error(`Missing ${rel}. Run: npm run build:artifacts`);
-    process.exit(1);
-  }
-}
-
 if (!skipBuild) {
   console.log('Building artifacts…');
   execSync('npm run build:artifacts', { cwd: root, stdio: 'inherit' });
+}
+
+const required = ['dist/server.js', 'client/dist/index.html', 'app.yaml', 'package.json'];
+for (const rel of required) {
+  if (!existsSync(join(root, rel))) {
+    console.error(`Missing ${rel} after build.`);
+    process.exit(1);
+  }
 }
 
 const staging = join(root, 'build', 'edw-vdi-deploy');
