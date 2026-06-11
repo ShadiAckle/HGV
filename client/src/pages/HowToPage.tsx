@@ -19,8 +19,12 @@ import {
   X,
   Copy,
   Check,
+  Cpu,
+  Plug,
 } from 'lucide-react';
+import { AgentMcpSection } from '@/components/howto/AgentMcpSection';
 import { RequirementsAlignmentSection } from '@/components/howto/RequirementsAlignmentSection';
+import { TechnologyDeepDiveSection } from '@/components/howto/TechnologyDeepDiveSection';
 
 interface Section {
   id: string;
@@ -42,8 +46,9 @@ const SECTIONS: Section[] = [
   { id: 'mentions',             icon: <AtSign size={16} />,        label: '@ Mentions & Lookup',      color: 'var(--primary)', audience: 'all' },
   { id: 'operating-gaps',       icon: <Shield size={16} />,        label: 'Operating Model Gaps',     color: 'var(--danger)',  audience: 'manager' },
   { id: 'identity',             icon: <Sliders size={16} />,       label: 'Identity & Permissions',   color: 'var(--gold)',    audience: 'manager' },
+  { id: 'technology-deep-dive', icon: <Cpu size={16} />,           label: 'Technology Deep Dive',     color: 'var(--primary)', audience: 'all' },
+  { id: 'agent-mcp',            icon: <Plug size={16} />,          label: 'Agent MCP Integration',    color: 'var(--success)', audience: 'all' },
   { id: 'requirements-alignment', icon: <CheckCircle2 size={16} />, label: 'Requirements Alignment', color: 'var(--success)', audience: 'all' },
-  { id: 'testing-guide',        icon: <CheckCircle2 size={16} />,  label: 'Interactive E2E Workflows',color: 'var(--success)', audience: 'all' },
 ];
 
 interface TipCardProps {
@@ -885,6 +890,14 @@ GROUP BY fp.payroll_lock_date, fp.accrual_basis, fp.ffs_reserve_pct;`}
     </div>
   ),
 
+  'technology-deep-dive': (
+    <TechnologyDeepDiveSection />
+  ),
+
+  'agent-mcp': (
+    <AgentMcpSection />
+  ),
+
   'requirements-alignment': (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <p style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--foreground-muted)' }}>
@@ -938,110 +951,6 @@ INSERT INTO workspace.hgv_comp.scenario_run (
   tour_volume_change_pct, conversion_rate_change_pct, created_by
 ) VALUES (:id, :name, :quota, :commission, :bonus, :accel, :tourVol, :convRate, :user);`}
       />
-    </div>
-  ),
-
-  'testing-guide': (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-      <p style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--foreground-muted)' }}>
-        Welcome to the **HGV IGNITE Stakeholder Demonstration Playbook**. Follow these step-by-step instructions to rehearse and demonstrate all capabilities to business teams.
-      </p>
-
-      {/* Under the Hood */}
-      <TipCard icon={<Sliders size={14} />} color="var(--primary)" title="How the App is Built Under the Hood">
-        The application is powered by the **Databricks Lakehouse** and **Unity Catalog**:
-        <ul className="list-disc pl-4 mt-2 space-y-1.5" style={{ paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-          <li><strong>Star Schema Backend:</strong> All queries fetch transactional realities from Delta Lake tables: `dim_rep`, `fact_deal_credit`, `fact_payout`, `fact_plan_eligibility`, `fact_comp_admin_log`, and `fact_chargeback`.</li>
-          <li><strong>AI model serving:</strong> Insights and the Copilot call the workspace serving endpoint configured for this app (`databricks-claude-sonnet-4-6`). Production disables Llama fallback (`LLM_ALLOW_FALLBACK=false`).</li>
-        </ul>
-      </TipCard>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-        <h4 style={{ fontSize: 13, fontWeight: 800, color: 'var(--foreground)', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem', marginBottom: '0.5rem' }}>
-          Step-by-Step Stakeholder Demonstration Playbooks
-        </h4>
-
-        {/* Script 1 */}
-        <div className="card" style={{ padding: '1.25rem', borderLeft: '3px solid var(--primary)' }}>
-          <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--foreground)', marginBottom: 8 }}>
-            🎭 Playbook Script 1: Frontline Representative Experience
-          </div>
-          <p style={{ fontSize: 11.5, color: 'var(--foreground-muted)', lineHeight: 1.5, marginBottom: '0.75rem' }}>
-            Demonstrates how a frontline seller interacts with statements, monitors rate accelerators, and gets AI performance coaching.
-          </p>
-          <ul style={{ listStyleType: 'decimal', paddingLeft: '1.25rem', fontSize: 11, color: 'var(--foreground-muted)', display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-            <li>Open the top-right navbar dropdown and select <strong>Jason Morrison (Sales Rep)</strong>.</li>
-            <li>Observe that the manager links disappear from the header, and you are automatically redirected to <code>My Compensation</code>.</li>
-            <li>Audit the <strong>Quota Attainment</strong> card (showing the green Aligned trend dot) and the <strong>Next Rate Booster</strong> card showing details on what is needed to hit the next tier.</li>
-            <li>Expand the right-hand **AI Copilot** and click the prompt chip: <i>"How close am I to my next rate booster?"</i></li>
-            <li>Watch the Copilot perform a database lookup and explain exactly what additional sales credit is needed to unlock your next multiplier.</li>
-          </ul>
-        </div>
-
-        {/* Script 2 */}
-        <div className="card" style={{ padding: '1.25rem', borderLeft: '3px solid var(--success)' }}>
-          <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--foreground)', marginBottom: 8 }}>
-            📞 Playbook Script 2: Manager Team Interventions
-          </div>
-          <p style={{ fontSize: 11.5, color: 'var(--foreground-muted)', lineHeight: 1.5, marginBottom: '0.75rem' }}>
-            Demonstrates how a manager monitors team performance and intervenes to save an at-risk deal.
-          </p>
-          <ul style={{ listStyleType: 'decimal', paddingLeft: '1.25rem', fontSize: 11, color: 'var(--foreground-muted)', display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-            <li>Switch your active identity in the navbar dropdown back to <strong>M. Vance (Manager)</strong>. Watch the full nav links reappear.</li>
-            <li>Go to the <strong>Team Workspace ➔ Comp Analysis</strong> tab and review the Leaderboard.</li>
-            <li>Click the **"Quota Progress"** column header to sort reps. Locate the representative highlighted in red (Below 70% attainment - at risk).</li>
-            <li>Click the **"Intervene"** button on their row. The performance drawer slides open from the right.</li>
-            <li>Toggle the **"Takeover Pricing"** switch to authorize deal pricing margin adjustments, and send the pre-populated Copilot prompt to watch the AI return a detailed coaching agenda.</li>
-          </ul>
-        </div>
-
-        {/* Script 3 */}
-        <div className="card" style={{ padding: '1.25rem', borderLeft: '3px solid var(--warning)' }}>
-          <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--foreground)', marginBottom: 8 }}>
-            ⚡ Playbook Script 3: Industry Market Alignment
-          </div>
-          <p style={{ fontSize: 11.5, color: 'var(--foreground-muted)', lineHeight: 1.5, marginBottom: '0.75rem' }}>
-            Demonstrates how executives model scenario changes and align plans with competitive market standards.
-          </p>
-          <ul style={{ listStyleType: 'decimal', paddingLeft: '1.25rem', fontSize: 11, color: 'var(--foreground-muted)', display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-            <li>Go to the <strong>Strategy Control Room ➔ Scenario Modeler</strong> tab.</li>
-            <li>Select custom scenarios in the Scenario Library to populate the side-by-side matrix and cost chart.</li>
-            <li>Scroll to the **HGV vs. Market Compensation Standards Gap Assessment** widget at the bottom.</li>
-            <li>Drag the **Director+ NOI Weight** slider from 30% to 65%.</li>
-            <li>Watch HGV's overpayment rating shift from *Low Margin Protection* to *Market Standard Aligned*, and document your decisions inside the Strategic Notepad card.</li>
-          </ul>
-        </div>
-
-        {/* Script 4 */}
-        <div className="card" style={{ padding: '1.25rem', borderLeft: '3px solid var(--success)' }}>
-          <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--foreground)', marginBottom: 8 }}>
-            Data Playbook Script 4: Data Model Reference Walkthrough
-          </div>
-          <p style={{ fontSize: 11.5, color: 'var(--foreground-muted)', lineHeight: 1.5, marginBottom: '0.75rem' }}>
-            Demonstrates the governed star schema blueprint and API-to-UI binding contract for production imports.
-          </p>
-          <ul style={{ listStyleType: 'decimal', paddingLeft: '1.25rem', fontSize: 11, color: 'var(--foreground-muted)', display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-            <li>Go to <strong>Strategy Control Room &gt; Data Model & Ingestion</strong> (default tab) and select <strong>Marketing</strong>.</li>
-            <li>Click <code>fact_plan_eligibility</code> to review rep-to-plan mapping and API bindings.</li>
-            <li>Open <strong>Semantic Metrics</strong> and confirm metrics like QTD Earnings map to the same tables and endpoints.</li>
-          </ul>
-        </div>
-
-        {/* Script 5 */}
-        <div className="card" style={{ padding: '1.25rem', borderLeft: '3px solid var(--primary)' }}>
-          <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--foreground)', marginBottom: 8 }}>
-            🛡️ Playbook Script 5: Admin Sync & Compliance Logs
-          </div>
-          <p style={{ fontSize: 11.5, color: 'var(--foreground-muted)', lineHeight: 1.5, marginBottom: '0.75rem' }}>
-            Demonstrates auditing payroll batches and exporting warehouse-backed compliance logs.
-          </p>
-          <ul style={{ listStyleType: 'decimal', paddingLeft: '1.25rem', fontSize: 11, color: 'var(--foreground-muted)', display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-            <li>Go to the <strong>Compensation Administration Desk</strong> page.</li>
-            <li>In the **Payroll Preview** tab, review net payable totals and per-rep adjustment columns.</li>
-            <li>Go to the **Audit Trail** tab and click **"Export Audit Log"** to print events from `fact_comp_admin_log`.</li>
-          </ul>
-        </div>
-      </div>
     </div>
   ),
 });
@@ -1206,6 +1115,7 @@ export function HowToPage() {
           {[
             { label: 'Quick Start: My Comp', id: 'my-comp' },
             { label: 'Quick Start: Team WS', id: 'team-ws' },
+            { label: 'Technology Deep Dive', id: 'technology-deep-dive' },
             { label: 'AI Copilot Guide', id: 'ai-copilot' },
           ].map(({ label, id }) => (
             <button

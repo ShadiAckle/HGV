@@ -97,16 +97,13 @@ export function CompOverviewPage() {
   return (
     <div className="space-y-16 animate-fade-in-up">
       {/* Premium Hero Panel */}
-      <div className="relative overflow-hidden rounded-3xl border border-glass-border bg-glass-bg backdrop-blur-xl p-8 sm:p-10 shadow-xl animate-glow-pulse">
-        <div className="absolute -right-10 -top-10 h-72 w-72 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
-        <div className="absolute left-1/3 bottom-0 h-48 w-48 rounded-full bg-secondary-foreground/5 blur-3xl pointer-events-none" />
-
+      <div className="hgv-page-hero p-8 sm:p-10">
         <div className="relative space-y-4 max-w-4xl">
-          <div className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-primary border border-primary/20">
-            <Sparkles className="h-3 w-3 text-gold-light" />
+          <div className="hero-badge inline-flex items-center gap-2 rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em]">
+            <Sparkles className="h-3 w-3 text-[var(--gold-light)]" />
             {simpleView ? 'IGNITE · SIMPLE VIEW' : 'IGNITE · SALES DASHBOARD'}
           </div>
-          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
             {simpleView ? (
               <>Your Pay <span className="text-sapphire-gradient">Made Simple</span></>
             ) : (
@@ -120,12 +117,12 @@ export function CompOverviewPage() {
           </p>
 
           <div className="flex flex-wrap gap-2.5 pt-3">
-            <Badge variant="outline" className="gap-1.5 font-semibold text-xs py-1 px-3 border-glass-border bg-background/50">
-              <Award className="h-3.5 w-3.5 text-primary" aria-hidden />
+            <Badge variant="outline" className="gap-1.5 font-semibold text-xs py-1 px-3 border-white/20 bg-white/10 text-white">
+              <Award className="h-3.5 w-3.5 text-[var(--gold-light)]" aria-hidden />
               {simpleView ? 'Live Pay Numbers' : 'Live System Sync'}
             </Badge>
-            <Badge variant="outline" className="gap-1.5 font-semibold text-xs py-1 px-3 border-glass-border bg-background/50">
-              <CheckCircle2 className="h-3.5 w-3.5 text-success-foreground" aria-hidden />
+            <Badge variant="outline" className="gap-1.5 font-semibold text-xs py-1 px-3 border-white/20 bg-white/10 text-white">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" aria-hidden />
               Earnings Synced Daily
             </Badge>
           </div>

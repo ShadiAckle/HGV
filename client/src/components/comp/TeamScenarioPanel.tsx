@@ -2,6 +2,15 @@ import { FlaskConical, RotateCcw } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { projectScenario, projectTeamAttainment } from '@shared/scenarioProjection';
+import {
+  formatCommissionRate,
+  formatQuotaDelta,
+  formatTourDelta,
+  QUOTA_SLIDER,
+  quotaPctFromDeltaUsd,
+  TOUR_SLIDER,
+  tourPctFromDelta,
+} from '@shared/scenarioLeverUnits';
 import { formatCurrency, formatPercent } from '@/lib/compFormat';
 import { KpiCard } from '@/components/comp/KpiCard';
 
@@ -18,7 +27,7 @@ interface SliderProps {
   min: number;
   max: number;
   step: number;
-  unit?: string;
+  formatValue?: (v: number) => string;
   color?: string;
   onChange: (v: number) => void;
 }
@@ -30,11 +39,12 @@ function ScenarioSlider({
   min,
   max,
   step,
-  unit = '%',
+  formatValue,
   color = 'var(--primary)',
   onChange,
 }: SliderProps) {
   const pct = ((value - min) / (max - min)) * 100;
+  const display = formatValue ? formatValue(value) : String(value);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11 }}>
@@ -42,9 +52,7 @@ function ScenarioSlider({
           {label}
         </label>
         <span className="badge badge-neutral" style={{ fontWeight: 700, fontSize: 10 }}>
-          {value > 0 ? '+' : ''}
-          {value}
-          {unit}
+          {display}
         </span>
       </div>
       <div style={{ position: 'relative', height: 6, display: 'flex', alignItems: 'center' }}>
@@ -91,11 +99,11 @@ function ScenarioSlider({
 }
 
 const DEFAULT_LEVERS = {
-  quota_change_pct: 0,
+  quota_delta_usd: 0,
   commission_rate_pct: 6,
   bonus_rate_change_pct: 0,
   accelerator_change_pct: 0,
-  tour_volume_change_pct: 0,
+  tour_delta: 0,
   conversion_rate_change_pct: 0,
 };
 
@@ -121,11 +129,11 @@ export function TeamScenarioPanel({
   const projection = useMemo(() => {
     const base = Math.max(baselineEarnings, 1);
     return projectScenario(
-      levers.quota_change_pct,
+      quotaPctFromDeltaUsd(levers.quota_delta_usd),
       levers.commission_rate_pct,
       levers.bonus_rate_change_pct,
       levers.accelerator_change_pct,
-      levers.tour_volume_change_pct,
+      tourPctFromDelta(levers.tour_delta),
       levers.conversion_rate_change_pct,
       base,
     );
@@ -135,11 +143,11 @@ export function TeamScenarioPanel({
     () =>
       projectTeamAttainment(
         baselineAttainment,
-        levers.quota_change_pct,
+        quotaPctFromDeltaUsd(levers.quota_delta_usd),
         levers.commission_rate_pct,
         levers.bonus_rate_change_pct,
         levers.accelerator_change_pct,
-        levers.tour_volume_change_pct,
+        tourPctFromDelta(levers.tour_delta),
         levers.conversion_rate_change_pct,
       ),
     [baselineAttainment, levers],
@@ -215,13 +223,14 @@ export function TeamScenarioPanel({
             <>
               <ScenarioSlider
                 id="team-tour-volume"
-                label="Tour volume change"
-                value={levers.tour_volume_change_pct}
-                min={-15}
-                max={25}
-                step={1}
+                label="Tour volume adjustment"
+                value={levers.tour_delta}
+                min={TOUR_SLIDER.min}
+                max={TOUR_SLIDER.max}
+                step={TOUR_SLIDER.step}
+                formatValue={formatTourDelta}
                 color="var(--gold)"
-                onChange={(v) => setLevers((l) => ({ ...l, tour_volume_change_pct: v }))}
+                onChange={(v) => setLevers((l) => ({ ...l, tour_delta: v }))}
               />
               <ScenarioSlider
                 id="team-conversion"
@@ -247,21 +256,22 @@ export function TeamScenarioPanel({
             <>
               <ScenarioSlider
                 id="team-quota"
-                label="Quota adjustment"
-                value={levers.quota_change_pct}
-                min={-20}
-                max={30}
-                step={1}
-                onChange={(v) => setLevers((l) => ({ ...l, quota_change_pct: v }))}
+                label="Quota adjustment (per rep)"
+                value={levers.quota_delta_usd}
+                min={QUOTA_SLIDER.min}
+                max={QUOTA_SLIDER.max}
+                step={QUOTA_SLIDER.step}
+                formatValue={formatQuotaDelta}
+                onChange={(v) => setLevers((l) => ({ ...l, quota_delta_usd: v }))}
               />
               <ScenarioSlider
                 id="team-commission"
-                label="Commission rate (baseline 6%)"
+                label="Commission rate"
                 value={levers.commission_rate_pct}
                 min={3}
                 max={12}
                 step={0.5}
-                unit="%"
+                formatValue={formatCommissionRate}
                 color="var(--success)"
                 onChange={(v) => setLevers((l) => ({ ...l, commission_rate_pct: v }))}
               />

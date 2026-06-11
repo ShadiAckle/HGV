@@ -1,0 +1,26 @@
+-- =============================================================================
+-- HGV Compensation Hub — SQL run order for catalog edw_dev_hris
+-- Schema: edw_dev_hris.hgv_comp
+-- =============================================================================
+-- DDL (structure only — production go-live):
+--   01_create_schema.sql
+--   05_extend_admin_finance.sql
+--   05b_extend_finance_reference.sql
+--   06_create_marketing_benchmark.sql
+--   07_create_regional_bonus.sql
+--   09_create_guest_registry.sql
+--   10_create_plan_assessment.sql
+--   09_alter_scenario_tour_volume.sql
+--   11_alter_scenario_conversion.sql
+--
+-- Optional demo seeds (skip for real data):
+--   02_seed_synthetic_data.sql, 02a_seed_core_dims.sql, 02b_seed_sales_core.sql,
+--   02c_seed_sales_diversity.sql, 04_seed_semantic_definitions.sql,
+--   05a_seed_admin_finance.sql, 06a_seed_marketing_benchmark.sql,
+--   07a_seed_regional_bonus.sql, 09a_seed_guest_registry.sql, 10a_seed_plan_assessment.sql
+--
+-- After app deploy — replace app service principal ID in grant scripts:
+--   03c_grant_catalog.sql, 03a_grant_use_schema.sql, 03b_grant_select.sql,
+--   03d_grant_use_schema.sql, 03e_grant_select.sql, 03_grant_app_sp.sql,
+--   08_grant_app_permissions.sql
+-- =============================================================================

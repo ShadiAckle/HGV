@@ -74,8 +74,8 @@ export function LuxeDbLoader({ loading, steps, title, variant = 'overlay' }: Lux
   }
 
   return (
-    <div className="animate-fade-in absolute inset-0 z-50 flex min-h-[260px] flex-col items-center justify-center rounded-[var(--radius-lg)] border border-border bg-[rgba(8,13,26,0.45)] p-8 text-center backdrop-blur-md">
-      <div className="w-full max-w-[380px] rounded-[var(--radius-xl)] border border-primary/25 bg-[rgba(13,20,36,0.85)] p-7 shadow-[var(--shadow-lg),0_0_30px_rgba(26,109,255,0.15)]">
+    <div className="animate-fade-in absolute inset-0 z-50 flex min-h-[260px] flex-col items-center justify-center rounded-[var(--radius-lg)] border border-border bg-white/80 p-8 text-center backdrop-blur-md">
+      <div className="w-full max-w-[380px] rounded-[var(--radius-xl)] border border-primary/20 bg-white p-7 shadow-[var(--shadow-lg)]">
         {body}
       </div>
     </div>

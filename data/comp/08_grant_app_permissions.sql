@@ -40,3 +40,10 @@ GRANT MODIFY ON TABLE workspace.hgv_comp.fact_manager_intervention TO `d8d67f27-
 GRANT MODIFY ON TABLE workspace.hgv_comp.fact_chargeback TO `d8d67f27-1896-4549-9351-e7b53a9df800`;
 GRANT MODIFY ON TABLE workspace.hgv_comp.dim_finance_period TO `d8d67f27-1896-4549-9351-e7b53a9df800`;
 GRANT MODIFY ON TABLE workspace.hgv_comp.fact_rep_product_mix TO `d8d67f27-1896-4549-9351-e7b53a9df800`;
+GRANT MODIFY ON TABLE workspace.hgv_comp.dim_household TO `d8d67f27-1896-4549-9351-e7b53a9df800`;
+GRANT MODIFY ON TABLE workspace.hgv_comp.dim_location TO `d8d67f27-1896-4549-9351-e7b53a9df800`;
+GRANT MODIFY ON TABLE workspace.hgv_comp.dim_guest TO `d8d67f27-1896-4549-9351-e7b53a9df800`;
+GRANT MODIFY ON TABLE workspace.hgv_comp.bridge_tour_guest TO `d8d67f27-1896-4549-9351-e7b53a9df800`;
+GRANT MODIFY ON TABLE workspace.hgv_comp.fact_guest_ownership TO `d8d67f27-1896-4549-9351-e7b53a9df800`;
+GRANT MODIFY ON TABLE workspace.hgv_comp.fact_guest_rental_stay TO `d8d67f27-1896-4549-9351-e7b53a9df800`;
+GRANT MODIFY ON TABLE workspace.hgv_comp.fact_guest_tour_history TO `d8d67f27-1896-4549-9351-e7b53a9df800`;

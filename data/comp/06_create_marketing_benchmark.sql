@@ -70,7 +70,16 @@ CREATE TABLE IF NOT EXISTS workspace.hgv_comp.fact_marketing_tour_payout (
   payout DECIMAL(14, 2),
   fps_eligible BOOLEAN,
   fps_potential DECIMAL(14, 2),
-  notes STRING
+  notes STRING,
+  guest_id STRING,
+  household_id STRING,
+  planned_tour_location_id STRING,
+  current_stay_location_id STRING,
+  lead_source STRING,
+  abc_score STRING,
+  package_type STRING,
+  xref_tour_id STRING,
+  tour_booked_date DATE
 ) USING DELTA
 COMMENT 'Marketing rep tour activity and credits';
 

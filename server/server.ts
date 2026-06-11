@@ -4,17 +4,24 @@ import { buildManagerWorkspace, formatManagerGroundingContext, formatCompactMana
 import { buildManagerInsightPrompt, extractAssistantContent, type ManagerInsightFocus } from './managerInsights.js';
 import {
   buildRepInsightPayload,
-  buildMarketingRepInsightPrompt,
+  buildMarketingRepCompactInsightPrompt,
   buildSalesRepInsightPrompt,
   formatCompactRepInsightContext,
   isMarketingRepId,
+  type RepInsightFocus,
 } from './repInsights.js';
 import {
   buildBenchmarkImpactPrompt,
   parseCompImpactLines,
   resolveBenchmarkRoleKey,
 } from './benchmarkImpactInsights.js';
-import { ensureCompExtensionsOnce } from './compSchemaBootstrap.js';
+import { requireAgentApiKey, requireMcpAccess } from './agentAuth.js';
+import { invokeCompAgent } from './agentGateway.js';
+import { fetchCompMetadata } from './compMetadata.js';
+import { searchCompMentions } from './mentionsSearch.js';
+import { mountMcpHttp } from './mcp/mountMcpHttp.js';
+import { mountResponsesAgent } from './responsesAgent.js';
+import { ensureCompExtensionsOnce, waitForBootstrap } from './compSchemaBootstrap.js';
 import {
   fetchActiveInterventions,
   fetchTeamAgentPerformance,
@@ -27,6 +34,7 @@ import {
   fetchRepMarketPositions,
   fetchRegionalBonusArea,
 } from './marketingRepWorkspace.js';
+import { buildMarketingTourContext } from './marketingTourContext.js';
 import { fetchPlanAssessment } from './planAssessment.js';
 import { mapWarehouseTeamMarket } from '../shared/benchmarkGrounding.js';
 import { sanitizeInsightText } from '../shared/sanitizeInsightText.js';
@@ -45,7 +53,8 @@ import {
 import { getModelServingInfo, modelInfoFromEndpoint } from './modelInfo.js';
 import { fetchPlanCatalogContext } from './compCatalogSeed.js';
 import { buildInterpretationPrompt, isRepFacingInterpretationKind, type InterpretationKind } from './compInterpretationInsights.js';
-import { CURRENT_PERIOD_ID, DEFAULT_PERIODS } from '../shared/compPeriods.js';
+import { CURRENT_PERIOD_ID } from '../shared/compPeriods.js';
+import { filterIndustryBenchmarkCatalog } from '../shared/industryBenchmarkCatalog.js';
 
 function setServingResponseHeaders(
   res: { setHeader: (k: string, v: string) => void },
@@ -112,6 +121,57 @@ appkit.server.extend((app) => {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Invocation failed';
       res.status(502).json({ error: message });
+    }
+  });
+
+  // Databricks Agents catalog — ResponsesAgent contract (Playground, Agent Bricks, Unity AI).
+  mountResponsesAgent(app, {
+    runSql,
+    appkit,
+    invokeAgent: invokeCompAgent,
+    prepare: () => waitForBootstrap(runSql),
+  });
+
+  // Agent gateway — MCP and external orchestrators call this with machine-to-machine auth.
+  app.get('/api/agent/health', requireAgentApiKey, (_req, res) => {
+    res.json({
+      status: 'ok',
+      agent: 'hgv-compensation-hub',
+      version: '1.0.0',
+      mcp: true,
+      mcp_endpoint: '/mcp',
+      mcp_endpoint_alias: '/api/mcp',
+      transport: 'streamable-http',
+    });
+  });
+
+  // MCP on agent-* apps causes AI Gateway to classify the app as an MCP server, not an Agent.
+  // Keep MCP on mcp-hgv-comp-hub only (ENABLE_EMBEDDED_MCP=true there).
+  const embeddedMcp = process.env.ENABLE_EMBEDDED_MCP === 'true';
+  if (embeddedMcp) {
+    mountMcpHttp(app, {
+      runSql,
+      appkit,
+      invokeAgent: invokeCompAgent,
+      fetchMetadata: () => fetchCompMetadata(runSql),
+      searchMentions: (query) => searchCompMentions(runSql, query),
+      getMarketingWorkspace: (repId, periodId) => buildMarketingRepWorkspace(runSql, repId, periodId),
+      getTourContext: (tourId, repId, periodId) => buildMarketingTourContext(runSql, tourId, repId, periodId),
+    }, requireAgentApiKey, requireMcpAccess);
+  }
+
+  app.post('/api/agent/invoke', requireAgentApiKey, async (req, res) => {
+    try {
+      await waitForBootstrap(runSql);
+      const result = await invokeCompAgent(appkit, runSql, req.body);
+      if (result.serving_endpoint) {
+        setServingResponseHeaders(res, result.serving_endpoint);
+      }
+      res.json(result);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Agent invocation failed';
+      const status = message.includes('required') ? 400 : 502;
+      res.status(status).json({ error: message });
     }
   });
 
@@ -267,80 +327,9 @@ appkit.server.extend((app) => {
   // Called as user types after `@` in the copilot input box. Returns up to 10 matching items.
   app.get('/api/comp/copilot/mentions-search', async (req, res) => {
     try {
-      const q = String(req.query.q ?? '').trim().replace(/'/g, "''").toLowerCase();
+      const q = String(req.query.q ?? '').trim();
       const type = String(req.query.type ?? 'all');
-
-      const items: { key: string; label: string; category: string }[] = [];
-
-      async function safeQuery(sql: string) {
-        try { return await runSql(sql); } catch { return []; }
-      }
-
-      if (type === 'all' || type === 'rep') {
-        const rows = await safeQuery(`
-          SELECT rep_id, rep_name, level_code, region
-          FROM workspace.hgv_comp.dim_rep
-          WHERE is_active = true
-            AND (LOWER(rep_name) LIKE '%${q}%' OR LOWER(rep_id) LIKE '%${q}%' OR LOWER(region) LIKE '%${q}%')
-          LIMIT 6
-        `);
-        for (const r of rows) {
-          items.push({
-            key: `rep:${r.rep_id}`,
-            label: `@rep:${r.rep_id} (${r.rep_name}, ${r.level_code})`,
-            category: 'Reps',
-          });
-        }
-      }
-
-      if (type === 'all' || type === 'team') {
-        const rows = await safeQuery(`
-          SELECT team_id, team_name, region
-          FROM workspace.hgv_comp.dim_team
-          WHERE LOWER(team_name) LIKE '%${q}%' OR LOWER(team_id) LIKE '%${q}%' OR LOWER(region) LIKE '%${q}%'
-          LIMIT 4
-        `);
-        for (const t of rows) {
-          items.push({
-            key: `team:${t.team_id}`,
-            label: `@team:${t.team_id} (${t.team_name})`,
-            category: 'Teams',
-          });
-        }
-      }
-
-      if (type === 'all' || type === 'scenario') {
-        const rows = await safeQuery(`
-          SELECT scenario_id, scenario_name, period_id
-          FROM workspace.hgv_comp.scenario_run
-          WHERE LOWER(scenario_name) LIKE '%${q}%' OR LOWER(scenario_id) LIKE '%${q}%'
-          LIMIT 4
-        `);
-        for (const s of rows) {
-          items.push({
-            key: `scenario:${s.scenario_id}`,
-            label: `@scenario:${s.scenario_id} (${s.scenario_name})`,
-            category: 'Scenarios',
-          });
-        }
-      }
-
-      if (type === 'all' || type === 'deal') {
-        const rows = await safeQuery(`
-          SELECT deal_id, property_display_name AS description, property_code AS sku, credit_status AS status
-          FROM workspace.hgv_comp.fact_deal_credit
-          WHERE LOWER(property_display_name) LIKE '%${q}%' OR LOWER(deal_id) LIKE '%${q}%' OR LOWER(property_code) LIKE '%${q}%'
-          LIMIT 4
-        `);
-        for (const d of rows) {
-          items.push({
-            key: `deal:${d.deal_id}`,
-            label: `@deal:${d.deal_id} (${d.description ?? d.sku})`,
-            category: 'Deals',
-          });
-        }
-      }
-
+      const items = await searchCompMentions(runSql, q, type);
       res.json(items);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Search failed';
@@ -560,11 +549,36 @@ appkit.server.extend((app) => {
     const repId = String(req.query.rep_id ?? 'PERSONA-MKT-REP').replace(/'/g, "''");
     const periodId = String(req.query.period_id ?? CURRENT_PERIOD_ID).replace(/'/g, "''");
     try {
-      await ensureCompExtensionsOnce(runSql);
+      void ensureCompExtensionsOnce(runSql);
+      await waitForBootstrap(runSql, 12_000);
       const payload = await buildMarketingRepWorkspace(runSql, repId, periodId);
       res.json(payload);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Marketing workspace failed';
+      res.status(502).json({ error: message });
+    }
+  });
+
+  // GET /api/comp/marketing/tour/:id/context — guest 360 for Intervene (comp-relevant)
+  app.get('/api/comp/marketing/tour/:id/context', async (req, res) => {
+    const tourId = String(req.params.id ?? '').replace(/'/g, "''");
+    const repId = req.query.rep_id ? String(req.query.rep_id).replace(/'/g, "''") : undefined;
+    const periodId = req.query.period_id ? String(req.query.period_id).replace(/'/g, "''") : undefined;
+    if (!tourId) {
+      res.status(400).json({ error: 'tour id required' });
+      return;
+    }
+    try {
+      void ensureCompExtensionsOnce(runSql);
+      await waitForBootstrap(runSql, 8_000);
+      const context = await buildMarketingTourContext(runSql, tourId, repId, periodId);
+      if (!context) {
+        res.status(404).json({ error: `Tour ${tourId} not found` });
+        return;
+      }
+      res.json(context);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Tour context failed';
       res.status(502).json({ error: message });
     }
   });
@@ -604,13 +618,17 @@ appkit.server.extend((app) => {
   app.get('/api/comp/benchmarks/industry', async (req, res) => {
     const periodId = String(req.query.period_id ?? CURRENT_PERIOD_ID);
     const roleKey = req.query.role_key ? String(req.query.role_key) : undefined;
+    void ensureCompExtensionsOnce(runSql);
     try {
-      await ensureCompExtensionsOnce(runSql);
       const rows = await fetchIndustryBenchmarks(runSql, roleKey, periodId);
-      res.json(rows);
+      if (rows.length > 0) {
+        res.json(rows);
+        return;
+      }
+      res.json(filterIndustryBenchmarkCatalog(periodId, roleKey));
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Industry benchmark query failed';
-      res.status(502).json({ error: message });
+      console.warn('Industry benchmark query failed — serving catalog fallback:', err);
+      res.json(filterIndustryBenchmarkCatalog(periodId, roleKey));
     }
   });
 
@@ -743,6 +761,7 @@ appkit.server.extend((app) => {
       insights_context: insightsContext,
       channel = 'sales',
       refresh_key: refreshKey,
+      focus: insightFocus = 'full',
     } = req.body as {
       rep_id?: string;
       period_id?: string;
@@ -750,6 +769,7 @@ appkit.server.extend((app) => {
       insights_context?: string;
       channel?: 'sales' | 'marketing';
       refresh_key?: string;
+      focus?: RepInsightFocus;
     };
 
     try {
@@ -768,20 +788,23 @@ appkit.server.extend((app) => {
         return;
       }
 
-      await ensureCompExtensionsOnce(runSql);
+      void ensureCompExtensionsOnce(runSql);
       const benchmarkRoleKey = useMarketing ? 'marketing_rep' : 'sales_executive';
       const industryRows = await fetchIndustryBenchmarks(runSql, benchmarkRoleKey, String(periodId));
       const grounding = { industryBenchmarks: industryRows };
 
+      const resolvedFocus: RepInsightFocus =
+        insightFocus === 'next_step' || insightFocus === 'qtd_earnings' ? insightFocus : 'full';
+
       const basePrompt = useMarketing
-        ? buildMarketingRepInsightPrompt(context.slice(0, 12000), resolvedRole, grounding)
+        ? buildMarketingRepCompactInsightPrompt(context.slice(0, 12000), resolvedRole, resolvedFocus, grounding)
         : buildSalesRepInsightPrompt(context.slice(0, 12000), resolvedRole, grounding);
       const prompt = appendGenerationVariation(basePrompt, refreshKey, plainEnglish);
 
       const requestBody = {
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 1024,
-        temperature: 0.6,
+        max_tokens: resolvedFocus === 'full' ? 1024 : 120,
+        temperature: 0.55,
         top_p: 0.92,
       };
 
@@ -1027,70 +1050,7 @@ appkit.server.extend((app) => {
   // GET /api/comp/metadata — lists active Reps, Teams, Periods, Scenarios, and Deals from the warehouse
   app.get('/api/comp/metadata', async (_req, res) => {
     try {
-      async function safeQuery(sql: string) {
-        try { return await runSql(sql); } catch { return []; }
-      }
-
-      const dbReps = await safeQuery(`
-        SELECT rep_id, rep_name, level_code, team_id, region, is_active
-        FROM workspace.hgv_comp.dim_rep
-        ORDER BY rep_name
-      `);
-
-      const reps = [
-        ...MARKETING_CHANNEL_IDENTITIES,
-        ...dbReps.map((r) => ({
-          ...r,
-          role_title: String(r.rep_id).includes('MGR') || r.level_code === 'L9' ? 'Sales Manager' : 'Sales Executive',
-          identity_group: String(r.rep_id).includes('MGR') || r.level_code === 'L9' ? 'sales_manager' : 'sales_executive',
-        })),
-      ];
-
-      const teams = await safeQuery(`
-        SELECT team_id, team_name, region
-        FROM workspace.hgv_comp.dim_team
-        ORDER BY team_name
-      `);
-
-      const periodsRaw = await safeQuery(`
-        SELECT period_id, period_label, is_current
-        FROM workspace.hgv_comp.dim_period
-        ORDER BY period_start DESC
-      `);
-      const allowedPeriodIds = new Set(DEFAULT_PERIODS.map((p) => p.period_id));
-      const filteredPeriods = periodsRaw.filter((p) => allowedPeriodIds.has(String(p.period_id)));
-      const periods = filteredPeriods.length > 0 ? filteredPeriods : periodsRaw.length > 0 ? periodsRaw : [...DEFAULT_PERIODS];
-
-      const scenarios = await safeQuery(`
-        SELECT scenario_id, scenario_name, period_id
-        FROM workspace.hgv_comp.scenario_run
-        ORDER BY scenario_id
-      `);
-
-      const deals = await safeQuery(`
-        SELECT deal_id, rep_id, credit_amount AS amount, credit_status AS status, property_display_name AS description
-        FROM workspace.hgv_comp.fact_deal_credit
-        LIMIT 25
-      `);
-
-      const countRows = await safeQuery(`
-        SELECT
-          (SELECT COUNT(*) FROM workspace.hgv_comp.fact_deal_credit) AS deal_count,
-          (SELECT COUNT(*) FROM workspace.hgv_comp.fact_payout) AS payout_count
-      `);
-      const counts = countRows[0] ?? {};
-
-      res.json({
-        reps,
-        teams,
-        periods,
-        scenarios,
-        deals,
-        counts: {
-          deals: Number(counts.deal_count ?? 0),
-          payouts: Number(counts.payout_count ?? 0),
-        },
-      });
+      res.json(await fetchCompMetadata(runSql));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Metadata lookup failed';
       res.status(502).json({ error: message });
@@ -1703,7 +1663,7 @@ appkit.server.extend((app) => {
     const requestPayload: any = {
       warehouse_id: warehouseId,
       statement,
-      wait_timeout: '30s',
+      wait_timeout: '50s',
       on_wait_timeout: 'CANCEL',
     };
 
@@ -1711,6 +1671,9 @@ appkit.server.extend((app) => {
 
     if (execBody.status?.state === 'FAILED') {
       throw new Error(execBody.status?.error?.message ?? 'SQL failed');
+    }
+    if (execBody.status?.state !== 'SUCCEEDED') {
+      throw new Error(`SQL did not complete (${execBody.status?.state ?? 'unknown'})`);
     }
 
     const columns = (execBody.manifest?.schema?.columns ?? []).map((c: any) => c.name);
@@ -1723,8 +1686,8 @@ appkit.server.extend((app) => {
 
   // GET /api/comp/scenarios — list all scenarios with results
   app.get('/api/comp/scenarios', async (_req, res) => {
-    try {
-      const rows = await runSql(`
+    void ensureCompExtensionsOnce(runSql);
+    const scenarioSql = `
         SELECT
           r.scenario_id,
           r.scenario_name,
@@ -1742,12 +1705,37 @@ appkit.server.extend((app) => {
           COALESCE(s.expected_performance_pct, 0) AS expected_performance_pct
         FROM workspace.hgv_comp.scenario_run r
         LEFT JOIN workspace.hgv_comp.scenario_result s USING (scenario_id)
-        ORDER BY r.scenario_id
-      `);
+        ORDER BY r.scenario_id`;
+    try {
+      const rows = await runSql(scenarioSql);
       res.json(rows);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Query failed';
-      res.status(502).json({ error: message });
+      console.warn('Scenario query failed — retrying without tour/conversion columns:', err);
+      try {
+        const rows = await runSql(`
+          SELECT
+            r.scenario_id,
+            r.scenario_name,
+            r.period_id,
+            r.quota_change_pct,
+            r.commission_rate_pct,
+            r.bonus_rate_change_pct,
+            r.accelerator_change_pct,
+            0 AS tour_volume_change_pct,
+            0 AS conversion_rate_change_pct,
+            r.created_by,
+            COALESCE(s.projected_payouts, 0)       AS projected_payouts,
+            COALESCE(s.budget_impact, 0)            AS budget_impact,
+            COALESCE(s.projected_cost, 0)           AS projected_cost,
+            COALESCE(s.expected_performance_pct, 0) AS expected_performance_pct
+          FROM workspace.hgv_comp.scenario_run r
+          LEFT JOIN workspace.hgv_comp.scenario_result s USING (scenario_id)
+          ORDER BY r.scenario_id`);
+        res.json(rows);
+      } catch (retryErr) {
+        const message = retryErr instanceof Error ? retryErr.message : 'Query failed';
+        res.status(502).json({ error: message });
+      }
     }
   });
 

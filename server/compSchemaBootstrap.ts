@@ -13,6 +13,7 @@ import { ensureManagerInterventionTable } from './managerInterventions.js';
 import { ensureFinanceReferenceTables } from './financeReferenceSeed.js';
 import { ensureMarketingTeamRoster, refreshMarketingMarketPositions, ensureSalesDiversitySeed, dedupeRepMarketPositions } from './marketingTeamSeed.js';
 import { ensureQuestionCatalogSeed } from './compCatalogSeed.js';
+import { ensureGuestRegistrySeed, ensureGuestRegistryTables } from './guestRegistrySeed.js';
 
 type RunSql = (sql: string) => Promise<Record<string, unknown>[]>;
 
@@ -59,7 +60,9 @@ export async function ensureCompExtensions(runSql: RunSql): Promise<void> {
     `CREATE TABLE IF NOT EXISTS workspace.hgv_comp.fact_marketing_tour_payout (
       tour_id STRING NOT NULL, rep_id STRING NOT NULL, period_id STRING NOT NULL,
       guest_name STRING, guest_type STRING, arrival_date DATE, tour_status STRING, code STRING,
-      payout DECIMAL(14, 2), fps_eligible BOOLEAN, fps_potential DECIMAL(14, 2), notes STRING
+      payout DECIMAL(14, 2), fps_eligible BOOLEAN, fps_potential DECIMAL(14, 2), notes STRING,
+      guest_id STRING, household_id STRING, planned_tour_location_id STRING, current_stay_location_id STRING,
+      lead_source STRING, abc_score STRING, package_type STRING, xref_tour_id STRING, tour_booked_date DATE
     ) USING DELTA`,
 
     `CREATE TABLE IF NOT EXISTS workspace.hgv_comp.fact_marketing_chargeback (
@@ -125,6 +128,10 @@ export async function ensureCompExtensions(runSql: RunSql): Promise<void> {
   await ensureAdminFinanceTables(runSql);
   await ensureManagerInterventionTable(runSql);
   await ensureFinanceReferenceTables(runSql);
+  await ensureGuestRegistryTables(runSql);
+  void ensureGuestRegistrySeed(runSql, { skipDdl: true }).catch((err) => {
+    console.warn('Guest registry background seed:', err instanceof Error ? err.message : err);
+  });
 
   const planAssessmentDdl = [
     `CREATE TABLE IF NOT EXISTS workspace.hgv_comp.plan_assessment_profile (
@@ -418,6 +425,15 @@ export function ensureCompExtensionsOnce(runSql: RunSql): Promise<void> {
     });
   }
   return bootstrapPromise;
+}
+
+/** Wait up to maxMs for bootstrap — never block page loads on full seed completion. */
+export async function waitForBootstrap(runSql: RunSql, maxMs = 15_000): Promise<void> {
+  const boot = ensureCompExtensionsOnce(runSql);
+  await Promise.race([
+    boot.catch(() => undefined),
+    new Promise<void>((resolve) => setTimeout(resolve, maxMs)),
+  ]);
 }
 
 async function ensureRegionalBonusTiers(runSql: RunSql): Promise<void> {

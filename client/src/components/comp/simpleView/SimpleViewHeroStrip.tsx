@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Sparkles } from 'lucide-react';
 import type { TrafficStatus } from '@shared/simpleViewStatus';
 import { TRAFFIC_COLORS, TRAFFIC_LABELS } from '@shared/simpleViewStatus';
@@ -11,10 +12,13 @@ export interface SimpleViewHeroMetric {
 interface SimpleViewHeroStripProps {
   metrics: [SimpleViewHeroMetric, SimpleViewHeroMetric, SimpleViewHeroMetric];
   overallStatus: TrafficStatus;
+  /** @deprecated Use aiNextStep instead for simple view */
   nextStep?: string;
+  /** AI-generated what's-next block (replaces static nextStep when provided) */
+  aiNextStep?: ReactNode;
 }
 
-export function SimpleViewHeroStrip({ metrics, overallStatus, nextStep }: SimpleViewHeroStripProps) {
+export function SimpleViewHeroStrip({ metrics, overallStatus, nextStep, aiNextStep }: SimpleViewHeroStripProps) {
   const statusColors = TRAFFIC_COLORS[overallStatus];
 
   return (
@@ -46,7 +50,8 @@ export function SimpleViewHeroStrip({ metrics, overallStatus, nextStep }: Simple
           </div>
         ))}
       </div>
-      {nextStep && (
+      {aiNextStep}
+      {!aiNextStep && nextStep && (
         <div className="border-t border-border/10 bg-primary/5 px-5 py-3 text-[12px] leading-relaxed text-foreground/90">
           <span className="font-bold text-primary">What&apos;s next: </span>
           {nextStep}

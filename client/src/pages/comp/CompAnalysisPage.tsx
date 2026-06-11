@@ -13,6 +13,17 @@ import { deriveLoadingSteps } from '@/lib/loadingSteps';
 import { LOADING } from '@/lib/loadingStepLabels';
 import { formatCompactCurrency, formatQueryError } from '@/lib/compFormat';
 import { projectScenario } from '@shared/scenarioProjection';
+import {
+  formatCommissionRate,
+  formatQuotaDelta,
+  formatTourDelta,
+  QUOTA_SLIDER,
+  quotaDeltaUsdFromPct,
+  quotaPctFromDeltaUsd,
+  TOUR_SLIDER,
+  tourDeltaFromPct,
+  tourPctFromDelta,
+} from '@shared/scenarioLeverUnits';
 import { useAppContext } from '@/context/AppContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -44,7 +55,7 @@ interface SliderProps {
   min: number;
   max: number;
   step: number;
-  unit?: string;
+  formatValue?: (v: number) => string;
   color?: string;
   helpText?: string;
   onChange: (v: number) => void;
@@ -52,15 +63,19 @@ interface SliderProps {
 
 const SLIDER_HELP = {
   quota:
-    'Moves every rep\'s sales goal up or down. Higher quota = harder to hit accelerators but lowers total comp cost. After saving, compare "Expected performance" and "Budget impact" in the matrix below.',
+    'Adjusts each rep\'s sales goal in $50K steps (vs a $1M planning baseline). Higher quota = harder to hit accelerators but lowers total comp cost. After saving, compare "Expected performance" and "Budget impact" in the matrix below.',
   commission:
-    'Changes the base commission % paid on closed deals. Higher rate increases rep pay and budget cost. Check projected payouts in the Comparison Matrix and the industry benchmark card.',
+    'Sets the actual commission % paid on closed deals (not a percent change). Default plan is 6%. Higher rate increases rep pay and budget cost.',
   tourVolume:
-    'Models more or fewer marketing tours flowing to the field. Affects tour-credit pay and downstream sales volume. Review tour-related rows in the matrix and ask the Scenario Planning Assistant for a plain summary.',
+    'Adds or removes tours in 100-tour steps (vs a 2,000-tour planning baseline per period). Affects tour-credit pay and downstream sales volume.',
 } as const;
 
-function Slider({ id, label, value, min, max, step, unit = '%', color = 'bg-primary', helpText, onChange }: SliderProps) {
+function Slider({ id, label, value, min, max, step, formatValue, color = 'bg-primary', helpText, onChange }: SliderProps) {
   const pct = ((value - min) / (max - min)) * 100;
+  const display = formatValue ? formatValue(value) : String(value);
+  const minLabel = formatValue ? formatValue(min) : String(min);
+  const maxLabel = formatValue ? formatValue(max) : String(max);
+  const zeroLabel = formatValue ? formatValue(0) : '0';
   return (
     <div
       className="rounded-xl border space-y-3"
@@ -71,7 +86,7 @@ function Slider({ id, label, value, min, max, step, unit = '%', color = 'bg-prim
         <span className={`rounded-full px-2.5 py-0.5 font-semibold tabular-nums ${
           value > 0 ? 'bg-primary/10 text-primary' : value < 0 ? 'bg-destructive/10 text-destructive' : 'bg-muted text-muted-foreground'
         }`}>
-          {value > 0 ? '+' : ''}{value}{unit}
+          {display}
         </span>
       </div>
       <div className="relative h-2.5 rounded-full bg-muted/80">
@@ -91,9 +106,9 @@ function Slider({ id, label, value, min, max, step, unit = '%', color = 'bg-prim
         />
       </div>
       <div className="flex justify-between text-[9px] text-muted-foreground tabular-nums">
-        <span>{min}{unit}</span>
-        <span>0</span>
-        <span>+{max}{unit}</span>
+        <span>{minLabel}</span>
+        <span>{zeroLabel}</span>
+        <span>{maxLabel}</span>
       </div>
       {helpText && (
         <p className="text-[11px] leading-relaxed text-muted-foreground border-t pt-3" style={{ borderColor: '#e8edf2' }}>
@@ -215,11 +230,11 @@ export function CompAnalysisPage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [form, setForm] = useState({
     name: '',
-    quota_change_pct: 0,
+    quota_delta_usd: 0,
     commission_rate_pct: 6.0,
     bonus_rate_change_pct: 0,
     accelerator_change_pct: 0,
-    tour_volume_change_pct: 0,
+    tour_delta: 0,
     conversion_rate_change_pct: 0,
     director_noi_weight: 30,
     annotation: '',
@@ -274,7 +289,7 @@ export function CompAnalysisPage() {
     if (!showCreate || !isMarketingManager) return;
     setForm((f) => ({
       ...f,
-      quota_change_pct: 0,
+      quota_delta_usd: 0,
       commission_rate_pct: 6.0,
       bonus_rate_change_pct: 0,
       accelerator_change_pct: 0,
@@ -291,8 +306,9 @@ export function CompAnalysisPage() {
     };
   }, [showCreate]);
 
-  const pageLoading = loading || benchmarksLoading;
-  const pageError = error || benchmarksError;
+  const pageLoading = loading;
+  const pageError = error;
+  const benchmarksUnavailable = !benchmarksLoading && !!benchmarksError;
 
   const loaderSteps = useMemo(
     () =>
@@ -304,15 +320,8 @@ export function CompAnalysisPage() {
           done: scenarios.length > 0,
           error: !!error,
         },
-        {
-          id: 'benchmarks',
-          label: LOADING.industryBenchmarks,
-          loading: benchmarksLoading,
-          done: industryBenchmarks.length > 0,
-          error: !!benchmarksError,
-        },
       ]),
-    [loading, benchmarksLoading, scenarios.length, industryBenchmarks.length, error, benchmarksError],
+    [loading, scenarios.length, error],
   );
 
   // Keep selected in sync with available scenarios
@@ -352,8 +361,9 @@ export function CompAnalysisPage() {
     setCreating(true);
     setCreateError(null);
     try {
-      const quota = isMarketingManager ? 0 : form.quota_change_pct;
+      const quota = isMarketingManager ? 0 : quotaPctFromDeltaUsd(form.quota_delta_usd);
       const commission = isMarketingManager ? 6.0 : form.commission_rate_pct;
+      const tourPct = tourPctFromDelta(form.tour_delta);
       const res = await fetch('/api/comp/scenarios', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -364,7 +374,7 @@ export function CompAnalysisPage() {
           commission_rate_pct: commission,
           bonus_rate_change_pct: 0,
           accelerator_change_pct: 0,
-          tour_volume_change_pct: form.tour_volume_change_pct,
+          tour_volume_change_pct: tourPct,
           conversion_rate_change_pct: 0,
         }),
       });
@@ -376,7 +386,7 @@ export function CompAnalysisPage() {
       updateAnnotation(id, form.annotation);
       await fetchScenarios();
       setShowCreate(false);
-      setForm({ name: '', quota_change_pct: 0, commission_rate_pct: 6.0, bonus_rate_change_pct: 0, accelerator_change_pct: 0, tour_volume_change_pct: 0, conversion_rate_change_pct: 0, director_noi_weight: 30, annotation: '' });
+      setForm({ name: '', quota_delta_usd: 0, commission_rate_pct: 6.0, bonus_rate_change_pct: 0, accelerator_change_pct: 0, tour_delta: 0, conversion_rate_change_pct: 0, director_noi_weight: 30, annotation: '' });
       // Auto-select the new scenario
       setSelected((prev) => (prev.length < 4 ? [...prev, id] : prev));
       setBenchmarkScenarioId(id);
@@ -416,11 +426,11 @@ export function CompAnalysisPage() {
       .map((s) =>
         [
           `## Scenario: ${s.scenario_name} (${s.scenario_id})`,
-          `- Quota change: ${n(s.quota_change_pct) > 0 ? '+' : ''}${n(s.quota_change_pct)}%`,
-          `- Commission rate: ${n(s.commission_rate_pct)}%`,
+          `- Quota adjustment: ${formatQuotaDelta(quotaDeltaUsdFromPct(n(s.quota_change_pct)))}`,
+          `- Commission rate: ${formatCommissionRate(n(s.commission_rate_pct))}`,
           `- Bonus rate change: ${n(s.bonus_rate_change_pct) > 0 ? '+' : ''}${n(s.bonus_rate_change_pct)}%`,
           `- Accelerator change: ${n(s.accelerator_change_pct) > 0 ? '+' : ''}${n(s.accelerator_change_pct)}%`,
-          `- Tour volume change: ${n(s.tour_volume_change_pct) > 0 ? '+' : ''}${n(s.tour_volume_change_pct)}%`,
+          `- Tour volume adjustment: ${formatTourDelta(tourDeltaFromPct(n(s.tour_volume_change_pct)))}`,
           `- Conversion rate change: ${n(s.conversion_rate_change_pct) > 0 ? '+' : ''}${n(s.conversion_rate_change_pct)}%`,
           `- Projected payouts: $${n(s.projected_payouts).toLocaleString()}`,
           `- Budget impact vs baseline: $${n(s.budget_impact).toLocaleString()}`,
@@ -447,14 +457,14 @@ export function CompAnalysisPage() {
 
   // Live projection preview (client-side formula mirrors server)
   const preview = useMemo(() => {
-    const quota = isMarketingManager ? 0 : form.quota_change_pct;
+    const quota = isMarketingManager ? 0 : quotaPctFromDeltaUsd(form.quota_delta_usd);
     const commission = isMarketingManager ? 6.0 : form.commission_rate_pct;
     const proj = projectScenario(
       quota,
       commission,
       0,
       0,
-      form.tour_volume_change_pct,
+      tourPctFromDelta(form.tour_delta),
       0,
     );
     return { projected: proj.projected_payouts, impact: proj.budget_impact, perf: proj.expected_performance_pct };
@@ -481,6 +491,16 @@ export function CompAnalysisPage() {
 
       {!pageLoading && !pageError && (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
+          {benchmarksUnavailable && (
+            <div className="lg:col-span-2 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800">
+              <X className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <p className="font-semibold">Industry benchmarks could not be refreshed from the warehouse</p>
+                <p className="text-xs opacity-80">{formatQueryError(benchmarksError)}</p>
+                <button type="button" onClick={() => void fetchIndustryBenchmarks()} className="mt-1 text-xs underline">Retry benchmarks</button>
+              </div>
+            </div>
+          )}
           <div className="space-y-6">
             {/* Scenario Library */}
             <div
@@ -548,11 +568,11 @@ export function CompAnalysisPage() {
                           {isBuiltin && <span className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-wide">Built-in</span>}
                         </div>
                         <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground tabular-nums font-medium">
-                          <span>Quota {n(s.quota_change_pct) >= 0 ? '+' : ''}{n(s.quota_change_pct)}%</span>
-                          <span>Comm {n(s.commission_rate_pct)}%</span>
+                          <span>Quota {formatQuotaDelta(quotaDeltaUsdFromPct(n(s.quota_change_pct)))}</span>
+                          <span>Comm {formatCommissionRate(n(s.commission_rate_pct))}</span>
                           <span>Bonus {n(s.bonus_rate_change_pct) >= 0 ? '+' : ''}{n(s.bonus_rate_change_pct)}%</span>
                           <span>Accel {n(s.accelerator_change_pct) >= 0 ? '+' : ''}{n(s.accelerator_change_pct)}%</span>
-                          <span>Tours {n(s.tour_volume_change_pct) >= 0 ? '+' : ''}{n(s.tour_volume_change_pct)}%</span>
+                          <span>Tours {formatTourDelta(tourDeltaFromPct(n(s.tour_volume_change_pct)))}</span>
                           <span>Conv {n(s.conversion_rate_change_pct) >= 0 ? '+' : ''}{n(s.conversion_rate_change_pct)}%</span>
                           <span className="text-primary font-bold">Proj. {formatCompactCurrency(s.projected_payouts)}</span>
                           <span className={n(s.budget_impact) > 0 ? 'text-amber-500 font-bold' : 'text-emerald-500 font-bold'}>
@@ -610,11 +630,11 @@ export function CompAnalysisPage() {
                     </thead>
                     <tbody className="divide-y divide-border/5 font-medium">
                       {[
-                        { label: 'Quota adjustment', key: 'quota_change_pct', fmt: (v: number) => `${v >= 0 ? '+' : ''}${v}%` },
-                        { label: 'Commission rate', key: 'commission_rate_pct', fmt: (v: number) => `${v}%` },
+                        { label: 'Quota adjustment', key: 'quota_change_pct', fmt: (v: number) => formatQuotaDelta(quotaDeltaUsdFromPct(v)) },
+                        { label: 'Commission rate', key: 'commission_rate_pct', fmt: (v: number) => formatCommissionRate(v) },
                         { label: 'Bonus rate change', key: 'bonus_rate_change_pct', fmt: (v: number) => `${v >= 0 ? '+' : ''}${v}%` },
                         { label: 'Accelerators', key: 'accelerator_change_pct', fmt: (v: number) => `${v >= 0 ? '+' : ''}${v}%` },
-                        { label: 'Tour volume', key: 'tour_volume_change_pct', fmt: (v: number) => `${v >= 0 ? '+' : ''}${v}%` },
+                        { label: 'Tour volume', key: 'tour_volume_change_pct', fmt: (v: number) => formatTourDelta(tourDeltaFromPct(v)) },
                         { label: 'Conversion', key: 'conversion_rate_change_pct', fmt: (v: number) => `${v >= 0 ? '+' : ''}${v}%` },
                         { label: 'Expected performance', key: 'expected_performance_pct', fmt: (v: number) => `${v}%` },
                         { label: 'Projected payouts', key: 'projected_payouts', fmt: formatCompactCurrency },
@@ -713,7 +733,10 @@ export function CompAnalysisPage() {
               }
 
               return (
-                <div className="glass-card space-y-6" style={{ padding: '2.25rem 2rem' }}>
+                <div
+                  className="rounded-2xl border bg-white space-y-6 shadow-sm"
+                  style={{ padding: '1.75rem 1.5rem', borderColor: '#e2e8f0' }}
+                >
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div className="space-y-0.5">
                       <h4 className="text-sm font-bold flex items-center gap-2 text-foreground">
@@ -992,7 +1015,7 @@ export function CompAnalysisPage() {
               examplePrompts={[
                 'Compare projected payouts across all selected scenarios.',
                 'Which scenario has the best ROI on budget impact?',
-                'What happens to performance if I increase quota by 10%?',
+                'What happens to performance if I raise quota by $100K per rep?',
                 'Explain the budget impact difference between Baseline and SIM-01.',
               ]}
               insightPrompt="Analyze the selected scenarios. Summarize the trade-offs between budget cost and expected performance for each, and recommend the optimal scenario."
@@ -1066,19 +1089,24 @@ export function CompAnalysisPage() {
                   <>
                     <Slider
                       id="quota-change"
-                      label="Quota adjustment"
-                      value={form.quota_change_pct}
-                      min={-20} max={30} step={1}
+                      label="Quota adjustment (per rep)"
+                      value={form.quota_delta_usd}
+                      min={QUOTA_SLIDER.min}
+                      max={QUOTA_SLIDER.max}
+                      step={QUOTA_SLIDER.step}
+                      formatValue={formatQuotaDelta}
                       color="bg-primary"
                       helpText={SLIDER_HELP.quota}
-                      onChange={(v) => setForm((f) => ({ ...f, quota_change_pct: v }))}
+                      onChange={(v) => setForm((f) => ({ ...f, quota_delta_usd: v }))}
                     />
                     <Slider
                       id="commission-rate"
-                      label="Commission rate (baseline: 6%)"
+                      label="Commission rate"
                       value={form.commission_rate_pct}
-                      min={3} max={12} step={0.5}
-                      unit="%"
+                      min={3}
+                      max={12}
+                      step={0.5}
+                      formatValue={formatCommissionRate}
                       color="bg-emerald-500"
                       helpText={SLIDER_HELP.commission}
                       onChange={(v) => setForm((f) => ({ ...f, commission_rate_pct: v }))}
@@ -1088,11 +1116,14 @@ export function CompAnalysisPage() {
                 <Slider
                   id="tour-volume-change"
                   label="Tour volume adjustment"
-                  value={form.tour_volume_change_pct}
-                  min={-30} max={50} step={5}
+                  value={form.tour_delta}
+                  min={TOUR_SLIDER.min}
+                  max={TOUR_SLIDER.max}
+                  step={TOUR_SLIDER.step}
+                  formatValue={formatTourDelta}
                   color="bg-primary"
                   helpText={SLIDER_HELP.tourVolume}
-                  onChange={(v) => setForm((f) => ({ ...f, tour_volume_change_pct: v }))}
+                  onChange={(v) => setForm((f) => ({ ...f, tour_delta: v }))}
                 />
               </div>
 

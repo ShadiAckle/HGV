@@ -1,0 +1,17 @@
+version: 1
+name: "Agent - HGV Compensation Hub"
+description: "HGV Compensation Agent — web UI + ResponsesAgent API on Model Serving"
+
+resource_specs:
+  - name: "sql-warehouse"
+    description: "SQL warehouse for Unity Catalog comp semantic layer"
+    sql_warehouse_spec:
+      permission: "CAN_USE"
+  - name: "serving-endpoint"
+    description: "Claude on Databricks Model Serving"
+    serving_endpoint_spec:
+      permission: "CAN_QUERY"
+  - name: "experiment"
+    description: "MLflow tracing for agent invocations"
+    experiment_spec:
+      permission: "CAN_MANAGE"

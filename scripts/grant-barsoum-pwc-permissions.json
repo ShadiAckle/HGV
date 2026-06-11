@@ -1,0 +1,8 @@
+{
+  "access_control_list": [
+    {
+      "user_name": "john.m.barsoum@pwc.com",
+      "permission_level": "CAN_MANAGE"
+    }
+  ]
+}

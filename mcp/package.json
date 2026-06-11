@@ -1,0 +1,15 @@
+{
+  "name": "hgv-comp-mcp-smoke",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Smoke tests for external agent HTTP/MCP integration",
+  "scripts": {
+    "smoke": "tsx src/smoke-client.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.6.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}

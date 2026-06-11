@@ -10,7 +10,7 @@
     "build:client": "tsc -b tsconfig.client.json && vite build --config client/vite.config.ts",
     "build:server": "tsc -b tsconfig.server.json && tsdown -c tsdown.server.config.ts",
     "build": "node -e \"console.log('Using pre-built dist/ artifacts')\"",
-    "build:artifacts": "npm run build:server && npm run build:client",
+    "build:artifacts": "npm run build:server && npm run build:client && node scripts/stage-mcp-app.mjs",
     "build:local": "npm run sync && npm run typegen && npm run build",
     "typecheck": "tsc -b tsconfig.server.json && tsc -b tsconfig.client.json",
     "lint": "eslint .",
@@ -28,7 +28,9 @@
     "typegen": "appkit generate-types",
     "setup": "appkit setup --write",
     "predeploy": "databricks bundle validate",
-    "deploy": "npm run build:artifacts && databricks bundle deploy && databricks bundle run app"
+    "deploy": "npm run build:artifacts && databricks bundle deploy --profile hgv-premium && databricks bundle run app --profile hgv-premium && databricks bundle run mcp_app --profile hgv-premium",
+    "deploy:agent": "npm run build:artifacts && databricks bundle deploy --profile hgv-premium && databricks bundle run app --profile hgv-premium",
+    "mcp:smoke": "npm run smoke --prefix mcp"
   },
   "keywords": [],
   "author": "",
@@ -36,6 +38,7 @@
   "description": "Hilton Grand Vacations Assistant: natural language over governed Unity Catalog data with Claude on Databricks",
   "dependencies": {
     "@databricks/appkit": "0.24.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@databricks/appkit-ui": "0.24.0",
     "@databricks/sdk-experimental": "0.14.2",
     "clsx": "2.1.1",

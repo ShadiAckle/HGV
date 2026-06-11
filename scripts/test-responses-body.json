@@ -1,0 +1,9 @@
+{
+  "input": [{ "role": "user", "content": "What metrics drive marketing rep comp?" }],
+  "custom_inputs": {
+    "rep_id": "PERSONA-MKT-REP",
+    "period_id": "2026-Q1",
+    "channel": "marketing"
+  },
+  "stream": false
+}

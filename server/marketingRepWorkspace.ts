@@ -5,6 +5,9 @@ import {
   netStatementPayout,
 } from '../shared/marketingEarningsAlign.js';
 import { formatTourCode, normalizeDisplayText } from '../shared/normalizeText.js';
+import { enrichMarketingTours } from './marketingTourContext.js';
+import { fetchMarketingDeskRank } from './marketingMoneyMap.js';
+import { buildMarketingMoneyMap, type MarketingMoneyMap } from '../shared/marketingMoneyMap.js';
 import { getPlanAssessmentFallback } from '../shared/planAssessmentCatalog.js';
 import { getBonusArea } from '../shared/bonusLevelsJan2025.js';
 import { CURRENT_PERIOD_ID } from '../shared/compPeriods.js';
@@ -55,6 +58,7 @@ export interface MarketingRepWorkspacePayload {
   tours: Array<Record<string, unknown>>;
   chargebacks: Array<Record<string, unknown>>;
   upcoming_arrivals: Array<Record<string, unknown>>;
+  money_map?: MarketingMoneyMap;
   insights_context: string;
   grounding_context: string;
 }
@@ -67,6 +71,13 @@ function b(v: unknown): boolean {
   return v === true || v === 'true' || v === 1;
 }
 
+async function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
+
 export async function buildMarketingRepWorkspace(
   runSql: RunSql,
   repId: string,
@@ -75,7 +86,7 @@ export async function buildMarketingRepWorkspace(
   const safeRep = esc(repId);
   const safePeriod = esc(periodId);
 
-  const [periodRows, metricRows, tourRows, cbRows, arrivalRows, periodLabelRows] = await Promise.all([
+  const [periodRows, metricRows, cbRows, arrivalRows, periodLabelRows] = await Promise.all([
     runSql(`
       SELECT p.*, d.period_label
       FROM workspace.hgv_comp.fact_marketing_rep_period p
@@ -87,12 +98,6 @@ export async function buildMarketingRepWorkspace(
       FROM workspace.hgv_comp.fact_marketing_rep_metric
       WHERE rep_id = '${safeRep}' AND period_id = '${safePeriod}'
       ORDER BY weight_pct DESC
-    `),
-    runSql(`
-      SELECT tour_id, guest_name, guest_type, arrival_date, tour_status, code, payout, fps_eligible, fps_potential, notes
-      FROM workspace.hgv_comp.fact_marketing_tour_payout
-      WHERE rep_id = '${safeRep}' AND period_id = '${safePeriod}'
-      ORDER BY arrival_date DESC
     `),
     runSql(`
       SELECT chargeback_id, guest_name, tour_id, premium_gift, chargeback_amount, notes
@@ -165,12 +170,7 @@ export async function buildMarketingRepWorkspace(
       tcc_gap_vs_market_pct: n(p.tcc_gap_vs_market_pct),
       at_risk_market: n(p.tcc_gap_vs_market_pct) <= -10,
     },
-    tours: tourRows.map((row) => ({
-      ...row,
-      guest_name: normalizeDisplayText(String(row.guest_name ?? '')),
-      code: formatTourCode(row.code),
-      notes: row.notes != null ? normalizeDisplayText(String(row.notes)) : row.notes,
-    })),
+    tours: [],
     chargebacks: cbRows.map((row) => ({
       ...row,
       guest_name: normalizeDisplayText(String(row.guest_name ?? '')),
@@ -181,8 +181,55 @@ export async function buildMarketingRepWorkspace(
     grounding_context: '',
   };
 
+  try {
+    payload.tours = await enrichMarketingTours(runSql, repId, periodId);
+  } catch (err) {
+    console.warn('Guest-enriched tour query failed — falling back to base ledger:', err instanceof Error ? err.message : err);
+    const tourRows = await runSql(`
+      SELECT tour_id, guest_name, guest_type, arrival_date, tour_status, code, payout, fps_eligible, fps_potential, notes
+      FROM workspace.hgv_comp.fact_marketing_tour_payout
+      WHERE rep_id = '${safeRep}' AND period_id = '${safePeriod}'
+      ORDER BY arrival_date DESC
+    `);
+    payload.tours = tourRows.map((row) => ({
+      ...row,
+      guest_name: normalizeDisplayText(String(row.guest_name ?? '')),
+      code: formatTourCode(row.code),
+      notes: row.notes != null ? normalizeDisplayText(String(row.notes)) : row.notes,
+    }));
+  }
+
   payload.insights_context = formatMarketingInsightContext(payload);
   payload.grounding_context = payload.insights_context;
+
+  const qualifiedRate =
+    payload.kpis.tours_shown > 0
+      ? Math.round((payload.kpis.qualified_tours / payload.kpis.tours_shown) * 1000) / 10
+      : 0;
+
+  payload.money_map = buildMarketingMoneyMap({
+    rep_id: payload.rep_id,
+    kpis: payload.kpis,
+    plan_metrics: payload.plan_metrics,
+    tours: payload.tours,
+    upcoming_arrivals: payload.upcoming_arrivals,
+    desk_rank: null,
+  });
+
+  try {
+    const deskRank = await withTimeout(
+      fetchMarketingDeskRank(runSql, payload.rep_id, periodId, qualifiedRate, payload.kpis.penetration_pct),
+      8_000,
+      null,
+    );
+    if (deskRank && payload.money_map) {
+      payload.money_map = { ...payload.money_map, desk_rank: deskRank };
+    }
+    payload.insights_context = formatMarketingInsightContext(payload);
+    payload.grounding_context = payload.insights_context;
+  } catch (err) {
+    console.warn('Desk rank / money map enrich failed:', err instanceof Error ? err.message : err);
+  }
 
   return payload;
 }
@@ -237,6 +284,13 @@ export function formatMarketingInsightContext(payload: MarketingRepWorkspacePayl
     '',
     '## Chargebacks',
     JSON.stringify(payload.chargebacks, null, 2),
+    ...(payload.money_map
+      ? [
+          '',
+          '## Money Map (comp-first insights — use for dollar-focused answers)',
+          JSON.stringify(payload.money_map, null, 2),
+        ]
+      : []),
   ].join('\n');
 }
 

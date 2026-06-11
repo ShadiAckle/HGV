@@ -1,0 +1,20 @@
+{
+  "access_control_list": [
+    {
+      "group_name": "account users",
+      "permission_level": "CAN_USE"
+    },
+    {
+      "group_name": "admins",
+      "permission_level": "CAN_MANAGE"
+    },
+    {
+      "user_name": "john.m.barsoum@pwc.com",
+      "permission_level": "CAN_MANAGE"
+    },
+    {
+      "user_name": "jbarsoum@ackleconsulting.com",
+      "permission_level": "CAN_MANAGE"
+    }
+  ]
+}

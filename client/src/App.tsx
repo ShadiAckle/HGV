@@ -87,10 +87,10 @@ function Layout() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexShrink: 0 }}>
             <div style={{
               width: 32, height: 32,
-              background: 'linear-gradient(135deg, var(--primary) 0%, #3D82FF 100%)',
+              background: 'linear-gradient(135deg, #0a2540 0%, #12365a 100%)',
               borderRadius: 8,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 2px 8px rgba(26,109,255,0.35)',
+              boxShadow: '0 2px 8px rgba(10,37,64,0.25)',
             }}>
               <span style={{ fontSize: 9, fontWeight: 900, letterSpacing: '0.06em', color: '#fff' }}>HGV</span>
             </div>
@@ -101,7 +101,7 @@ function Layout() {
           </div>
 
           {/* Nav tabs — managers get all tabs, reps get Overview, My Comp, How To */}
-          <nav style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }} aria-label="Main navigation">
+          <nav className="header-nav-wrap" aria-label="Main navigation">
             <NavLink to="/" end className={navLinkClass} id="nav-overview">
               Overview
             </NavLink>

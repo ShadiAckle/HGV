@@ -162,16 +162,15 @@ export function buildMarketingRepInsightPrompt(
     'You have governed context below — qualified tours (Owner vs New Buyer), FPS packages, plan metric weights, upcoming arrivals with projected payout, and industry compensation benchmarks.',
     '',
     'CRITICAL RULES:',
-    '1. Answer ONLY from the context. Name specific tour_id, guest names, Owner/NB type, dollar amounts, and tier labels.',
+    '1. Answer ONLY from the context. Name specific tour_id, guest names, Owner/NB type, and dollar amounts.',
     '2. NEVER tell the rep to "check another system" — the data is already here.',
-    '3. Tie every action to plan metrics: Qualified Tours (Owner/NB) 45%, Individual FPS Packages 35%, Individual Sales Transactions 20%.',
-    '4. For upcoming arrivals and open tours, recommend converting specific tours to FPS sales to unlock metric attainment (e.g. "Convert ARR-90412 Tony Stark Owner tour to FPS → +$520 toward FPS Packages metric").',
-    '5. Reference pay mix benchmarks when compensation mix differs from market — explain how HGV plan levers (tiers, SPIFFs, tour quality) create upside rather than framing HGV as disadvantaged.',
-    '6. Use the Benchmark Impact Facts block — cite dollar QTD gaps, variable exposure, and tour-tier upside on the rep\'s actual statement; always conclude with HGV earnings opportunity.',
-    '7. Format as a concise earnings brief (150–250 words):',
-    '   - Open with one bold sentence on QTD posture and gap to next tier (no section label)',
-    '   - **Plan actions** (3 numbered): each maps to a plan metric weight with specific tour/arrival IDs and $ impact',
-    '   - **Watch item**: chargeback, show-rate, or controllable metric — never HGV plan deficiency',
+    '3. Speak in DOLLARS first. Use the Money Map: recovery_usd, fps_leakage_usd, arrivals_pipeline, plan_progress opportunity_usd, tour_chips.',
+    '4. Tie actions to plan metrics: Qualified Tours 45%, FPS Packages 35%, Sales Transactions 20%.',
+    '5. For upcoming arrivals and open FPS tours, name the guest and $ upside (e.g. "Clark Kent no-show = $455 recovery; Bruce Wayne = $420 FPS open").',
+    '6. Format as a concise earnings brief (150–250 words):',
+    '   - Open with one bold sentence: biggest dollar gap (tier, FPS leakage, or no-show recovery)',
+    '   - **Plan actions** (3 numbered): each names tour/arrival ID + $ impact toward plan metrics',
+    '   - **Watch item**: one controllable metric (no-show, FPS unsold, chargeback) — never HGV plan deficiency',
     '',
     ...withHgvRepBrandFraming([]),
     '=== LIVE MARKETING REP CONTEXT ===',
@@ -184,4 +183,41 @@ export function buildMarketingRepInsightPrompt(
 
 export function isMarketingRepId(repId: string): boolean {
   return repId === 'PERSONA-MKT-REP';
+}
+
+export type RepInsightFocus = 'full' | 'next_step' | 'qtd_earnings';
+
+export function buildMarketingRepCompactInsightPrompt(
+  context: string,
+  roleTitle: string,
+  focus: RepInsightFocus,
+  grounding?: InsightGroundingOptions,
+): string {
+  const grounded = appendInsightGrounding(context, {
+    includeTeamMarket: false,
+    industryBenchmarks: grounding?.industryBenchmarks,
+  });
+
+  const focusRule =
+    focus === 'next_step'
+      ? 'Write EXACTLY 2 short sentences (max 50 words total). Sentence 1: biggest dollar gap from Money Map (recovery_usd, fps_leakage_usd, or plan opportunity). Sentence 2: one named tour_id or arrival_id and specific $ if they act. No headings, bullets, or markdown.'
+      : focus === 'qtd_earnings'
+        ? 'Write EXACTLY 2 short sentences (max 50 words total). Sentence 1: what drove QTD earnings in plain dollars. Sentence 2: single biggest money left on table (FPS leakage, no-show recovery, or tier gap). No headings, bullets, or markdown.'
+        : '';
+
+  if (focus !== 'full') {
+    return [
+      `You are the HGV IGNITE Compensation Agent advising a ${roleTitle} on tour-based marketing compensation.`,
+      focusRule,
+      'Answer ONLY from the context. Speak in DOLLARS first — name a specific tour_id, guest_name, or arrival_id and the $ impact.',
+      'Use the Money Map block when present: recovery_usd (no-show $ at risk), fps_leakage_usd (FPS left on table), arrivals_pipeline.projected_total_usd, plan_progress.opportunity_usd.',
+      'Do NOT mention market pay comparisons, TCC gaps, or director-level benchmarks.',
+      ...withHgvRepBrandFraming([]),
+      '=== LIVE MARKETING REP CONTEXT ===',
+      grounded,
+      '=== END CONTEXT ===',
+    ].join('\n');
+  }
+
+  return buildMarketingRepInsightPrompt(context, roleTitle, grounding);
 }

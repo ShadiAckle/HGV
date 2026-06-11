@@ -9,8 +9,11 @@ variables:
 
 sync:
   include:
+    - app.yaml
+    - manifest.yaml
     - dist/**
     - client/dist/**
+    - mcp-app/**
   exclude:
     - node_modules/**
     - .databricks/**
@@ -22,10 +25,14 @@ sync:
     - .smoke-test-videos/**
 
 resources:
+  experiments:
+    agent_tracing:
+      name: /Users/${workspace.current_user.userName}/agent-hgv-comp-hub
+
   apps:
     app:
-      name: "hilton-kb-chat"
-      description: "HGV Sales Compensation Assistant — governed comp semantic layer + LLM on Model Serving"
+      name: "agent-hgv-comp-hub"
+      description: "HGV Compensation Agent — web UI + ResponsesAgent API on Model Serving"
       user_api_scopes:
         - sql
         - model-serving
@@ -45,6 +52,55 @@ resources:
             value_from: serving-endpoint
           - name: LLM_ALLOW_FALLBACK
             value: "false"
+          - name: DATABRICKS_APP_NAME
+            value: "agent-hgv-comp-hub"
+          - name: ENABLE_EMBEDDED_MCP
+            value: "false"
+          - name: MCP_COMPANION_APP_NAME
+            value: "mcp-hgv-comp-hub"
+          - name: MLFLOW_TRACKING_URI
+            value: "databricks"
+          - name: MLFLOW_EXPERIMENT_ID
+            value_from: experiment
+      resources:
+        - name: sql-warehouse
+          sql_warehouse:
+            id: ${var.sql_warehouse_id}
+            permission: CAN_USE
+        - name: serving-endpoint
+          serving_endpoint:
+            name: ${var.serving_endpoint_name}
+            permission: CAN_QUERY
+        - name: experiment
+          experiment:
+            experiment_id: ${resources.experiments.agent_tracing.id}
+            permission: CAN_MANAGE
+
+    # MCP-only app (mcp- prefix) — required for AI Gateway → MCPs catalog
+    mcp_app:
+      name: "mcp-hgv-comp-hub"
+      description: "HGV Compensation Hub MCP server — AI Playground, Agent Bricks, Unity AI Gateway"
+      user_api_scopes:
+        - sql
+        - model-serving
+      source_code_path: ./mcp-app
+      config:
+        command:
+          - node
+          - dist/server.js
+        env:
+          - name: NODE_ENV
+            value: production
+          - name: FLASK_RUN_HOST
+            value: "0.0.0.0"
+          - name: DATABRICKS_WAREHOUSE_ID
+            value_from: sql-warehouse
+          - name: DATABRICKS_SERVING_ENDPOINT_NAME
+            value_from: serving-endpoint
+          - name: LLM_ALLOW_FALLBACK
+            value: "false"
+          - name: ENABLE_EMBEDDED_MCP
+            value: "true"
       resources:
         - name: sql-warehouse
           sql_warehouse:
