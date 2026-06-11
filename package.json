@@ -29,7 +29,7 @@
     "typegen": "appkit generate-types",
     "setup": "appkit setup --write",
     "predeploy": "databricks bundle validate -t hgv-premium-legacy",
-    "deploy": "echo \"Use package:edw-vdi + GitHub Actions for VDI, or bundle deploy -t edw-dev-hris when target is configured\" && exit 1",
+    "deploy": "echo \"Use npm run package:edw-vdi locally, then upload the zip to Databricks Apps on VDI\" && exit 1",
     "deploy:legacy": "npm run build:artifacts && databricks bundle deploy -t hgv-premium-legacy --profile hgv-premium && databricks bundle run app -t hgv-premium-legacy --profile hgv-premium",
     "deploy:agent": "npm run build:artifacts && databricks bundle deploy -t hgv-premium-legacy --profile hgv-premium && databricks bundle run app -t hgv-premium-legacy --profile hgv-premium",
     "mcp:smoke": "npm run smoke --prefix mcp"
