@@ -65,9 +65,7 @@ $ddlFiles = @(
     '06_create_marketing_benchmark.sql',
     '07_create_regional_bonus.sql',
     '09_create_guest_registry.sql',
-    '10_create_plan_assessment.sql',
-    '09_alter_scenario_tour_volume.sql',
-    '11_alter_scenario_conversion.sql'
+    '10_create_plan_assessment.sql'
 )
 
 $seedFiles = @(

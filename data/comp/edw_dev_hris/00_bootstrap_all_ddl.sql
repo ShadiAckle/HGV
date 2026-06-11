@@ -187,7 +187,8 @@ CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.fact_comp_admin_log (
   amount       DECIMAL(14,2),
   reason       STRING        NOT NULL,
   approved_by  STRING,
-  created_at   TIMESTAMP     NOT NULL
+  created_at   TIMESTAMP     NOT NULL,
+  attributed_nsv DECIMAL(14,2)
 ) USING DELTA
 COMMENT 'Audit log of all compensation administration events';
 
@@ -254,9 +255,7 @@ CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.dim_finance_period (
 ) USING DELTA
 COMMENT 'Finance period config: budget, accrual calendar, ROI/corridor thresholds';
 
--- SPIFF incremental NSV attribution (ETL-populated per admin event)
-ALTER TABLE edw_dev_hris.hgv_comp.fact_comp_admin_log
-  ADD COLUMN IF NOT EXISTS attributed_nsv DECIMAL(14,2);
+-- attributed_nsv is on fact_comp_admin_log DDL in 05_extend_admin_finance.sql
 
 -- Period finance config — 2026-Q2 (current)
 INSERT INTO edw_dev_hris.hgv_comp.dim_finance_period
@@ -532,16 +531,7 @@ CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.fact_guest_tour_history (
 ) USING DELTA
 COMMENT 'Prior tour outcomes across time for qualification context';
 
--- Extend marketing tour payout with guest spine FKs (idempotent ALTER for existing tables)
-ALTER TABLE edw_dev_hris.hgv_comp.fact_marketing_tour_payout ADD COLUMN guest_id STRING;
-ALTER TABLE edw_dev_hris.hgv_comp.fact_marketing_tour_payout ADD COLUMN household_id STRING;
-ALTER TABLE edw_dev_hris.hgv_comp.fact_marketing_tour_payout ADD COLUMN planned_tour_location_id STRING;
-ALTER TABLE edw_dev_hris.hgv_comp.fact_marketing_tour_payout ADD COLUMN current_stay_location_id STRING;
-ALTER TABLE edw_dev_hris.hgv_comp.fact_marketing_tour_payout ADD COLUMN lead_source STRING;
-ALTER TABLE edw_dev_hris.hgv_comp.fact_marketing_tour_payout ADD COLUMN abc_score STRING;
-ALTER TABLE edw_dev_hris.hgv_comp.fact_marketing_tour_payout ADD COLUMN package_type STRING;
-ALTER TABLE edw_dev_hris.hgv_comp.fact_marketing_tour_payout ADD COLUMN xref_tour_id STRING;
-ALTER TABLE edw_dev_hris.hgv_comp.fact_marketing_tour_payout ADD COLUMN tour_booked_date DATE;
+-- Guest spine columns on fact_marketing_tour_payout are in 06_create_marketing_benchmark.sql
 
 
 
@@ -568,20 +558,4 @@ CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.plan_assessment_segment (
   segment_value STRING NOT NULL
 ) USING DELTA
 COMMENT 'HGV vs market plan assessment row segments';
-
-
-
--- ----- 09_alter_scenario_tour_volume.sql -----
-
--- Tour volume scenario lever column (no DEFAULT — Delta rejects column defaults on this warehouse)
-ALTER TABLE edw_dev_hris.hgv_comp.scenario_run ADD COLUMN tour_volume_change_pct DECIMAL(6, 2);
-UPDATE edw_dev_hris.hgv_comp.scenario_run SET tour_volume_change_pct = 0.00 WHERE tour_volume_change_pct IS NULL;
-
-
-
--- ----- 11_alter_scenario_conversion.sql -----
-
--- Conversion rate scenario lever (FPS / tour close assumptions)
-ALTER TABLE edw_dev_hris.hgv_comp.scenario_run ADD COLUMN conversion_rate_change_pct DECIMAL(6, 2);
-UPDATE edw_dev_hris.hgv_comp.scenario_run SET conversion_rate_change_pct = 0.00 WHERE conversion_rate_change_pct IS NULL;
 

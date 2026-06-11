@@ -72,8 +72,7 @@ const ddlFiles = [
   '07_create_regional_bonus.sql',
   '09_create_guest_registry.sql',
   '10_create_plan_assessment.sql',
-  '09_alter_scenario_tour_volume.sql',
-  '11_alter_scenario_conversion.sql',
+  // 09_alter / 11_alter omitted — columns already in 01_create_schema.sql scenario_run
 ];
 
 const bootstrapParts = [

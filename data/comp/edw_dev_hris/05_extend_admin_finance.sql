@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.fact_comp_admin_log (
   amount       DECIMAL(14,2),
   reason       STRING        NOT NULL,
   approved_by  STRING,
-  created_at   TIMESTAMP     NOT NULL
+  created_at   TIMESTAMP     NOT NULL,
+  attributed_nsv DECIMAL(14,2)
 ) USING DELTA
 COMMENT 'Audit log of all compensation administration events';
 

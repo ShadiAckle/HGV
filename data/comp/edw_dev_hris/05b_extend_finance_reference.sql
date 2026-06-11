@@ -20,9 +20,7 @@ CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.dim_finance_period (
 ) USING DELTA
 COMMENT 'Finance period config: budget, accrual calendar, ROI/corridor thresholds';
 
--- SPIFF incremental NSV attribution (ETL-populated per admin event)
-ALTER TABLE edw_dev_hris.hgv_comp.fact_comp_admin_log
-  ADD COLUMN IF NOT EXISTS attributed_nsv DECIMAL(14,2);
+-- attributed_nsv is on fact_comp_admin_log DDL in 05_extend_admin_finance.sql
 
 -- Period finance config — 2026-Q2 (current)
 INSERT INTO edw_dev_hris.hgv_comp.dim_finance_period
