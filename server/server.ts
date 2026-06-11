@@ -21,6 +21,7 @@ import { fetchCompMetadata } from './compMetadata.js';
 import { searchCompMentions } from './mentionsSearch.js';
 import { mountMcpHttp } from './mcp/mountMcpHttp.js';
 import { mountResponsesAgent } from './responsesAgent.js';
+import { rewriteCompCatalogSql } from '../shared/compCatalog.js';
 import { ensureCompExtensionsOnce, waitForBootstrap } from './compSchemaBootstrap.js';
 import {
   fetchActiveInterventions,
@@ -1662,7 +1663,7 @@ appkit.server.extend((app) => {
 
     const requestPayload: any = {
       warehouse_id: warehouseId,
-      statement,
+      statement: rewriteCompCatalogSql(statement),
       wait_timeout: '50s',
       on_wait_timeout: 'CANCEL',
     };

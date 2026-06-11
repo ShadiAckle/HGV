@@ -11,6 +11,7 @@ sync:
   include:
     - app.yaml
     - manifest.yaml
+    - config/queries/**
     - dist/**
     - client/dist/**
     - mcp-app/**
@@ -58,6 +59,10 @@ resources:
             value: "false"
           - name: MCP_COMPANION_APP_NAME
             value: "mcp-hgv-comp-hub"
+          - name: COMP_CATALOG
+            value: edw_dev_hris
+          - name: COMP_SCHEMA
+            value: hgv_comp
           - name: MLFLOW_TRACKING_URI
             value: "databricks"
           - name: MLFLOW_EXPERIMENT_ID
@@ -112,11 +117,23 @@ resources:
             permission: CAN_QUERY
 
 targets:
-  default:
-    default: true
+  # Legacy sandbox — do not deploy here (HGV moved to VDI / edw_dev_hris)
+  hgv-premium-legacy:
+    default: false
     workspace:
       host: https://dbc-60a40685-ea2b.cloud.databricks.com
-
     variables:
       sql_warehouse_id: 0df692712c9a2f9a
       serving_endpoint_name: databricks-claude-sonnet-4-6
+
+  # VDI / edw_dev_hris — fill host + warehouse, then:
+  #   databricks auth login --host <url> --profile edw-dev-hris
+  #   databricks bundle deploy -t edw-dev-hris --profile edw-dev-hris
+  # Until host is set, deploy via GitHub Actions zip → Apps upload on VDI.
+  # edw-dev-hris:
+  #   default: true
+  #   workspace:
+  #     host: https://YOUR-VDI-WORKSPACE.cloud.databricks.com
+  #   variables:
+  #     sql_warehouse_id: YOUR_WAREHOUSE_ID
+  #     serving_endpoint_name: databricks-claude-sonnet-4-6
