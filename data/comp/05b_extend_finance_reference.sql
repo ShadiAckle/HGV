@@ -5,7 +5,7 @@
 -- Purpose: Governed finance config consumed by Finance Intelligence APIs
 -- =============================================================================
 
-CREATE TABLE IF NOT EXISTS workspace.hgv_comp.dim_finance_period (
+CREATE OR REPLACE TABLE workspace.hgv_comp.dim_finance_period (
   period_id                 STRING        NOT NULL,
   budget_comp               DECIMAL(14,2) NOT NULL,
   payroll_lock_date         DATE          NOT NULL,

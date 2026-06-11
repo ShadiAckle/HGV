@@ -82,14 +82,27 @@ const bootstrapParts = [
   '',
 ];
 
-for (const f of ddlFiles) {
-  const body = readFileSync(join(outDir, f), 'utf8');
-  const stripped = body.replace(/^--[^\n]*\n/gm, (line) =>
+function ddlBodyForBootstrap(filename, body) {
+  let sql = body.replace(/^--[^\n]*\n/gm, (line) =>
     line.startsWith('-- ===') || line.includes('Generated copy') || line.includes('Regenerate:')
       ? ''
       : line,
   );
-  bootstrapParts.push(`-- ----- ${f} -----`, stripped.trim(), '');
+  // 05b seed INSERT/UPDATE requires demo rows — DDL bootstrap is CREATE TABLE only
+  if (filename === '05b_extend_finance_reference.sql') {
+    const end = sql.search(/;\s*\n\s*\n\s*-- attributed_nsv/);
+    if (end !== -1) sql = sql.slice(0, end + 1);
+    else {
+      const createEnd = sql.match(/COMMENT '[^']+';/);
+      if (createEnd) sql = sql.slice(0, createEnd.index + createEnd[0].length);
+    }
+  }
+  return sql.trim();
+}
+
+for (const f of ddlFiles) {
+  const body = readFileSync(join(outDir, f), 'utf8');
+  bootstrapParts.push(`-- ----- ${f} -----`, ddlBodyForBootstrap(f, body), '');
 }
 
 writeFileSync(join(outDir, '00_bootstrap_all_ddl.sql'), bootstrapParts.join('\n\n'), 'utf8');

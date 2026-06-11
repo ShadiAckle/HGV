@@ -160,7 +160,7 @@ COMMENT 'Payouts vs budget chart series';
 -- Table 1: fact_plan_eligibility
 -- Tracks plan assignment, eligibility, and proration per rep per period
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.fact_plan_eligibility (
+CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.fact_plan_eligibility (
   rep_id            STRING      NOT NULL,
   period_id         STRING      NOT NULL,
   plan_version_id   STRING      NOT NULL,
@@ -179,7 +179,7 @@ COMMENT 'Plan eligibility and assignment per rep per period';
 -- Table 2: fact_comp_admin_log
 -- Audit log for all compensation administration events
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.fact_comp_admin_log (
+CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.fact_comp_admin_log (
   event_id     STRING        NOT NULL,
   rep_id       STRING        NOT NULL,
   period_id    STRING        NOT NULL,
@@ -196,7 +196,7 @@ COMMENT 'Audit log of all compensation administration events';
 -- Table 3: fact_chargeback
 -- Chargeback and reserve detail per deal
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.fact_chargeback (
+CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.fact_chargeback (
   chargeback_id       STRING        NOT NULL,
   deal_id             STRING        NOT NULL,
   rep_id              STRING        NOT NULL,
@@ -214,7 +214,7 @@ COMMENT 'Chargeback and reserve detail per deal';
 -- Table 4: fact_tour_quality
 -- Tour-level quality and performance data for Finance analysis
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.fact_tour_quality (
+CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.fact_tour_quality (
   tour_id           STRING        NOT NULL,
   rep_id            STRING        NOT NULL,
   period_id         STRING        NOT NULL,
@@ -240,7 +240,7 @@ COMMENT 'Tour-level quality and performance data for Finance analysis';
 -- Schema: edw_dev_hris.hgv_comp
 -- Purpose: Governed finance config consumed by Finance Intelligence APIs
 
-CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.dim_finance_period (
+CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.dim_finance_period (
   period_id                 STRING        NOT NULL,
   budget_comp               DECIMAL(14,2) NOT NULL,
   payroll_lock_date         DATE          NOT NULL,
@@ -254,50 +254,6 @@ CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.dim_finance_period (
   accrual_policy_notes      STRING
 ) USING DELTA
 COMMENT 'Finance period config: budget, accrual calendar, ROI/corridor thresholds';
-
--- attributed_nsv is on fact_comp_admin_log DDL in 05_extend_admin_finance.sql
-
--- Period finance config — 2026-Q2 (current)
-INSERT INTO edw_dev_hris.hgv_comp.dim_finance_period
-  (period_id, budget_comp, payroll_lock_date, accrual_basis,
-   var_comp_target_min_pct, var_comp_target_max_pct, spiff_roi_threshold,
-   rescission_target_pct, ebitda_margin_pct, ffs_reserve_pct, accrual_policy_notes)
-SELECT '2026-Q2', 14500000.00, DATE '2026-07-15',
-  'Monthly earned, true-up quarterly',
-  8.00, 12.00, 3.00, 8.00, 19.00, 12.00,
-  'FFS reserve held 12% for 6-month rescission window; chargebacks netted in period of recognition'
-WHERE NOT EXISTS (
-  SELECT 1 FROM edw_dev_hris.hgv_comp.dim_finance_period WHERE period_id = '2026-Q2'
-);
-
-INSERT INTO edw_dev_hris.hgv_comp.dim_finance_period
-  (period_id, budget_comp, payroll_lock_date, accrual_basis,
-   var_comp_target_min_pct, var_comp_target_max_pct, spiff_roi_threshold,
-   rescission_target_pct, ebitda_margin_pct, ffs_reserve_pct, accrual_policy_notes)
-SELECT '2025-Q4', 13800000.00, DATE '2026-01-15',
-  'Monthly earned, true-up quarterly',
-  8.00, 12.00, 3.00, 8.00, 19.00, 12.00,
-  'Prior-period finance control baseline'
-WHERE NOT EXISTS (
-  SELECT 1 FROM edw_dev_hris.hgv_comp.dim_finance_period WHERE period_id = '2025-Q4'
-);
-
--- Attribute incremental NSV to SPIFF / SPIFF_APPROVAL events (2026-Q2)
-UPDATE edw_dev_hris.hgv_comp.fact_comp_admin_log SET attributed_nsv = 2400.00
-WHERE event_id = 'ADMEVT-0005' AND period_id = '2026-Q2' AND attributed_nsv IS NULL;
-
-UPDATE edw_dev_hris.hgv_comp.fact_comp_admin_log SET attributed_nsv = 3600.00
-WHERE event_id = 'ADMEVT-0006' AND period_id = '2026-Q2' AND attributed_nsv IS NULL;
-
-UPDATE edw_dev_hris.hgv_comp.fact_comp_admin_log SET attributed_nsv = 42750.00
-WHERE event_id = 'ADMEVT-0012' AND period_id = '2026-Q2' AND attributed_nsv IS NULL;
-
--- Bootstrap seed event ids (runtime adminFinanceSeed)
-UPDATE edw_dev_hris.hgv_comp.fact_comp_admin_log SET attributed_nsv = 2400.00
-WHERE event_id = 'ADMEVT-0005' AND attributed_nsv IS NULL;
-
-UPDATE edw_dev_hris.hgv_comp.fact_comp_admin_log SET attributed_nsv = 3600.00
-WHERE event_id = 'ADMEVT-0006' AND attributed_nsv IS NULL;
 
 
 

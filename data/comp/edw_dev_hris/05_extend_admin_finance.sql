@@ -10,7 +10,7 @@
 -- Table 1: fact_plan_eligibility
 -- Tracks plan assignment, eligibility, and proration per rep per period
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.fact_plan_eligibility (
+CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.fact_plan_eligibility (
   rep_id            STRING      NOT NULL,
   period_id         STRING      NOT NULL,
   plan_version_id   STRING      NOT NULL,
@@ -29,7 +29,7 @@ COMMENT 'Plan eligibility and assignment per rep per period';
 -- Table 2: fact_comp_admin_log
 -- Audit log for all compensation administration events
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.fact_comp_admin_log (
+CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.fact_comp_admin_log (
   event_id     STRING        NOT NULL,
   rep_id       STRING        NOT NULL,
   period_id    STRING        NOT NULL,
@@ -46,7 +46,7 @@ COMMENT 'Audit log of all compensation administration events';
 -- Table 3: fact_chargeback
 -- Chargeback and reserve detail per deal
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.fact_chargeback (
+CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.fact_chargeback (
   chargeback_id       STRING        NOT NULL,
   deal_id             STRING        NOT NULL,
   rep_id              STRING        NOT NULL,
@@ -64,7 +64,7 @@ COMMENT 'Chargeback and reserve detail per deal';
 -- Table 4: fact_tour_quality
 -- Tour-level quality and performance data for Finance analysis
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.fact_tour_quality (
+CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.fact_tour_quality (
   tour_id           STRING        NOT NULL,
   rep_id            STRING        NOT NULL,
   period_id         STRING        NOT NULL,
