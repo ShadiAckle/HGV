@@ -17,6 +17,7 @@
 --   12_bootstrap_live_source_views.sql
 --   (run AFTER 00_bootstrap_all_ddl.sql, SKIP demo seeds below)
 --   13_hotfix_view_performance.sql — if dim_rep / metadata queries hang (re-run safe)
+--   14_hotfix_marketing_tour_window.sql — if fact_marketing_rep_period hangs (36mo window)
 --
 -- Optional demo seeds (skip when using 12_bootstrap_live_source_views.sql):
 --   02_seed_synthetic_data.sql, 02a_seed_core_dims.sql, 02b_seed_sales_core.sql,

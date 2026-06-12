@@ -632,7 +632,28 @@ WHERE COALESCE(uc.cancel_volume, 0) <> 0
 
 -- ---------------------------------------------------------------------------
 -- Marketing compensation facts
+-- LOOKBACK: 36 months — full it_smt_detail history will hang on rep-period rollups.
 -- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp.dim_marketing_rep AS
+SELECT
+  CAST(p.salesperson_1_employee_id AS STRING) AS rep_id,
+  MAX(
+    COALESCE(NULLIF(TRIM(p.salesperson_1_name), ''), CAST(p.salesperson_1_employee_id AS STRING))
+  ) AS rep_name,
+  'MKT' AS level_code,
+  MAX(COALESCE(NULLIF(TRIM(p.sales_team_code), ''), 'TEAM-MKT')) AS team_id,
+  MAX(COALESCE(NULLIF(TRIM(m.office_region), ''), 'Other')) AS region,
+  TRUE AS is_active
+FROM edw_dev_cognos.cognos_fm.it_smt_personnel p
+INNER JOIN edw_dev_cognos.cognos_fm.it_smt_detail d
+  ON d.tour_key_hash = p.tour_key_hash
+LEFT JOIN edw_dev_cognos.cognos_fm.it_smt_marketing m
+  ON p.tour_key_hash = m.tour_key_hash
+WHERE p.salesperson_1_employee_id IS NOT NULL
+  AND COALESCE(TO_DATE(d.tour_date), TO_DATE(d.transaction_date))
+    >= ADD_MONTHS(CURRENT_DATE(), -36)
+GROUP BY CAST(p.salesperson_1_employee_id AS STRING);
 
 CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp.fact_marketing_tour_payout AS
 SELECT
@@ -677,7 +698,8 @@ SELECT
 FROM edw_dev_hris.hgv_comp._src_tour_spine t
 WHERE t.tour_id IS NOT NULL
   AND t.salesperson_1_employee_id IS NOT NULL
-  AND t.tour_date IS NOT NULL;
+  AND t.tour_date IS NOT NULL
+  AND t.tour_date >= ADD_MONTHS(CURRENT_DATE(), -36);
 
 CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp.fact_marketing_rep_period AS
 WITH tour_agg AS (

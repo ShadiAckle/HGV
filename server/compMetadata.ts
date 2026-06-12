@@ -33,15 +33,16 @@ export async function fetchCompMetadata(runSql: RunSql) {
     LIMIT 500
   `);
 
+  // dim_marketing_rep — lightweight rep picker (do not scan fact_marketing_rep_period for metadata).
   const warehouseMarketingReps = await safeQuery(`
-    SELECT DISTINCT
+    SELECT
       rep_id,
       COALESCE(rep_name, rep_id) AS rep_name,
-      'MKT' AS level_code,
-      COALESCE(assigned_area, 'TEAM-MKT') AS team_id,
-      COALESCE(assigned_area, 'West') AS region,
-      true AS is_active
-    FROM workspace.hgv_comp.fact_marketing_rep_period
+      level_code,
+      team_id,
+      region,
+      is_active
+    FROM workspace.hgv_comp.dim_marketing_rep
     WHERE rep_id IS NOT NULL
       AND NOT rep_id LIKE 'PERSONA-MKT-%'
     ORDER BY rep_name
