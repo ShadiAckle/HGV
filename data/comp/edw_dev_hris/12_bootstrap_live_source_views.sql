@@ -79,95 +79,111 @@ LEFT JOIN edw_dev_cognos.cognos_fm.it_smt_marketing m
 LEFT JOIN edw_dev_cognos.cognos_fm.it_smt_personnel p
   ON d.tour_key_hash = p.tour_key_hash;
 
+-- Rep directory: GROUP BY rep keys (never DISTINCT-scan full commissions at tour/payment grain).
 CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp._src_rep_directory AS
-SELECT DISTINCT
+SELECT
   CAST(p.salesperson_1_employee_id AS STRING) AS rep_id,
-  COALESCE(NULLIF(TRIM(p.salesperson_1_name), ''), 'Unknown Rep') AS rep_name,
+  MAX(COALESCE(NULLIF(TRIM(p.salesperson_1_name), ''), 'Unknown Rep')) AS rep_name,
   'MKT' AS level_code,
-  COALESCE(NULLIF(TRIM(p.sales_team_code), ''), 'TEAM-MKT') AS team_id,
+  MAX(COALESCE(NULLIF(TRIM(p.sales_team_code), ''), 'TEAM-MKT')) AS team_id,
   CAST(NULL AS STRING) AS manager_rep_id,
-  COALESCE(NULLIF(TRIM(m.office_region), ''), 'Other') AS region,
+  MAX(COALESCE(NULLIF(TRIM(m.office_region), ''), 'Other')) AS region,
   TRUE AS is_active,
   'marketing' AS source_domain
 FROM edw_dev_cognos.cognos_fm.it_smt_personnel p
 LEFT JOIN edw_dev_cognos.cognos_fm.it_smt_marketing m
   ON p.tour_key_hash = m.tour_key_hash
 WHERE p.salesperson_1_employee_id IS NOT NULL
+GROUP BY CAST(p.salesperson_1_employee_id AS STRING)
 
-UNION
+UNION ALL
 
-SELECT DISTINCT
+SELECT
   c.participant AS rep_id,
-  c.participant AS rep_name,
-  CASE
-    WHEN LOWER(c.title) LIKE '%manager%' THEN 'L8'
-    WHEN LOWER(c.title) LIKE '%train%' THEN 'L5'
-    ELSE 'L6'
-  END AS level_code,
-  COALESCE(NULLIF(TRIM(c.businessUnit), ''), 'TEAM-FIELD') AS team_id,
+  MAX(c.participant) AS rep_name,
+  MAX(
+    CASE
+      WHEN LOWER(c.title) LIKE '%manager%' THEN 'L8'
+      WHEN LOWER(c.title) LIKE '%train%' THEN 'L5'
+      ELSE 'L6'
+    END
+  ) AS level_code,
+  MAX(COALESCE(NULLIF(TRIM(c.businessUnit), ''), 'TEAM-FIELD')) AS team_id,
   CAST(NULL AS STRING) AS manager_rep_id,
   'Field' AS region,
   TRUE AS is_active,
   'field' AS source_domain
 FROM edw_dev_hris.pwcmodels.commissions c
-WHERE c.participant IS NOT NULL;
+WHERE c.participant IS NOT NULL
+  AND c.payDate IS NOT NULL
+  AND TO_DATE(c.payDate) >= ADD_MONTHS(CURRENT_DATE(), -60)
+GROUP BY c.participant;
 
+-- Period calendar: aggregate to quarter grain (avoid DISTINCT over full commissions history).
 CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp._src_period_calendar AS
-SELECT DISTINCT
-  CONCAT(
-    CAST(YEAR(TO_DATE(payDate)) AS STRING),
-    '-Q',
-    CAST(CAST(CEIL(MONTH(TO_DATE(payDate)) / 3.0) AS INT) AS STRING)
-  ) AS period_id,
-  CONCAT(
-    'Q',
-    CAST(CAST(CEIL(MONTH(TO_DATE(payDate)) / 3.0) AS INT) AS STRING),
-    ' ',
-    CAST(YEAR(TO_DATE(payDate)) AS STRING)
-  ) AS period_label,
-  MAKE_DATE(
-    YEAR(TO_DATE(payDate)),
-    CAST((CAST(CEIL(MONTH(TO_DATE(payDate)) / 3.0) AS INT) - 1) * 3 + 1 AS INT),
-    1
-  ) AS period_start,
-  LAST_DAY(
+WITH commission_quarters AS (
+  SELECT
+    CONCAT(
+      CAST(YEAR(TO_DATE(payDate)) AS STRING),
+      '-Q',
+      CAST(CAST(CEIL(MONTH(TO_DATE(payDate)) / 3.0) AS INT) AS STRING)
+    ) AS period_id,
+    CONCAT(
+      'Q',
+      CAST(CAST(CEIL(MONTH(TO_DATE(payDate)) / 3.0) AS INT) AS STRING),
+      ' ',
+      CAST(YEAR(TO_DATE(payDate)) AS STRING)
+    ) AS period_label,
     MAKE_DATE(
       YEAR(TO_DATE(payDate)),
-      CAST(CAST(CEIL(MONTH(TO_DATE(payDate)) / 3.0) AS INT) * 3 AS INT),
+      CAST((CAST(CEIL(MONTH(TO_DATE(payDate)) / 3.0) AS INT) - 1) * 3 + 1 AS INT),
       1
-    )
-  ) AS period_end
-FROM edw_dev_hris.pwcmodels.commissions
-WHERE payDate IS NOT NULL
-
-UNION
-
-SELECT DISTINCT
-  CONCAT(
-    CAST(YEAR(t.tour_date) AS STRING),
-    '-Q',
-    CAST(CAST(CEIL(MONTH(t.tour_date) / 3.0) AS INT) AS STRING)
-  ) AS period_id,
-  CONCAT(
-    'Q',
-    CAST(CAST(CEIL(MONTH(t.tour_date) / 3.0) AS INT) AS STRING),
-    ' ',
-    CAST(YEAR(t.tour_date) AS STRING)
-  ) AS period_label,
-  MAKE_DATE(
-    YEAR(t.tour_date),
-    CAST((CAST(CEIL(MONTH(t.tour_date) / 3.0) AS INT) - 1) * 3 + 1 AS INT),
-    1
-  ) AS period_start,
-  LAST_DAY(
+    ) AS period_start,
+    LAST_DAY(
+      MAKE_DATE(
+        YEAR(TO_DATE(payDate)),
+        CAST(CAST(CEIL(MONTH(TO_DATE(payDate)) / 3.0) AS INT) * 3 AS INT),
+        1
+      )
+    ) AS period_end
+  FROM edw_dev_hris.pwcmodels.commissions
+  WHERE payDate IS NOT NULL
+    AND TO_DATE(payDate) >= ADD_MONTHS(CURRENT_DATE(), -60)
+  GROUP BY 1, 2, 3, 4
+),
+tour_quarters AS (
+  SELECT
+    CONCAT(
+      CAST(YEAR(t.tour_date) AS STRING),
+      '-Q',
+      CAST(CAST(CEIL(MONTH(t.tour_date) / 3.0) AS INT) AS STRING)
+    ) AS period_id,
+    CONCAT(
+      'Q',
+      CAST(CAST(CEIL(MONTH(t.tour_date) / 3.0) AS INT) AS STRING),
+      ' ',
+      CAST(YEAR(t.tour_date) AS STRING)
+    ) AS period_label,
     MAKE_DATE(
       YEAR(t.tour_date),
-      CAST(CAST(CEIL(MONTH(t.tour_date) / 3.0) AS INT) * 3 AS INT),
+      CAST((CAST(CEIL(MONTH(t.tour_date) / 3.0) AS INT) - 1) * 3 + 1 AS INT),
       1
-    )
-  ) AS period_end
-FROM edw_dev_hris.hgv_comp._src_tour_spine t
-WHERE t.tour_date IS NOT NULL;
+    ) AS period_start,
+    LAST_DAY(
+      MAKE_DATE(
+        YEAR(t.tour_date),
+        CAST(CAST(CEIL(MONTH(t.tour_date) / 3.0) AS INT) * 3 AS INT),
+        1
+      )
+    ) AS period_end
+  FROM edw_dev_hris.hgv_comp._src_tour_spine t
+  WHERE t.tour_date IS NOT NULL
+    AND t.tour_date >= ADD_MONTHS(CURRENT_DATE(), -60)
+  GROUP BY 1, 2, 3, 4
+)
+SELECT period_id, period_label, period_start, period_end FROM commission_quarters
+UNION
+SELECT period_id, period_label, period_start, period_end FROM tour_quarters;
 
 -- ---------------------------------------------------------------------------
 -- Drop synthetic tables that will become views (views cannot replace tables in-place)
@@ -654,7 +670,10 @@ SELECT
   t.abc_score,
   t.package_type,
   CAST(t.tour_key AS STRING) AS xref_tour_id,
-  TO_DATE(t.tour_booked_date) AS tour_booked_date
+  TO_DATE(t.tour_booked_date) AS tour_booked_date,
+  COALESCE(NULLIF(TRIM(t.salesperson_1_name), ''), CAST(t.salesperson_1_employee_id AS STRING)) AS rep_name,
+  COALESCE(NULLIF(TRIM(t.office_region), ''), 'Other') AS rep_region,
+  COALESCE(NULLIF(TRIM(t.sales_team_code), ''), 'TEAM-MKT') AS rep_team_id
 FROM edw_dev_hris.hgv_comp._src_tour_spine t
 WHERE t.tour_id IS NOT NULL
   AND t.salesperson_1_employee_id IS NOT NULL
@@ -665,9 +684,9 @@ WITH tour_agg AS (
   SELECT
     tp.rep_id,
     tp.period_id,
-    MAX(r.rep_name) AS rep_name,
-    MAX(r.region) AS region,
-    MAX(r.team_id) AS team_id,
+    MAX(tp.rep_name) AS rep_name,
+    MAX(tp.rep_region) AS region,
+    MAX(tp.rep_team_id) AS team_id,
     COUNT(*) AS tours_total,
     SUM(CASE WHEN tp.guest_type = 'Qualified' THEN 1 ELSE 0 END) AS qualified_tours,
     SUM(CASE WHEN tp.guest_type IN ('Qualified', 'Showed') THEN 1 ELSE 0 END) AS tours_shown,
@@ -676,8 +695,6 @@ WITH tour_agg AS (
     SUM(CASE WHEN tp.guest_type = 'Qualified' THEN tp.payout ELSE 0 END) AS qualified_tour_pay,
     SUM(CASE WHEN tp.guest_type = 'Courtesy' THEN tp.payout ELSE 0 END) AS courtesy_tour_pay
   FROM edw_dev_hris.hgv_comp.fact_marketing_tour_payout tp
-  LEFT JOIN edw_dev_hris.hgv_comp.dim_rep r
-    ON r.rep_id = tp.rep_id
   GROUP BY tp.rep_id, tp.period_id
 )
 SELECT

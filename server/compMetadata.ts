@@ -9,32 +9,41 @@ const MARKETING_CHANNEL_IDENTITIES = [
   { rep_id: 'PERSONA-MKT-DIR', rep_name: 'D. Whitfield', level_code: 'C2c', team_id: 'TEAM-MKT-REG', region: 'West', is_active: true, role_title: 'Marketing Director', persona_id: 'marketing_director', plan_id: 'PLAN-MKT-DIR-2026', identity_group: 'marketing_channel' },
 ] as const;
 
+const METADATA_PERIOD_LIMIT = 24;
+
 export async function fetchCompMetadata(runSql: RunSql) {
+  const production = isProductionCompDataMode();
+
   async function safeQuery(sql: string) {
     try {
       return await runSql(sql);
-    } catch {
+    } catch (err) {
+      console.warn('metadata query failed:', err instanceof Error ? err.message : err);
       return [];
     }
   }
 
-  const dbReps = await safeQuery(`
+  // dim_rep expands to a full commissions scan — skip on production marketing deploy.
+  const dbReps = production
+    ? []
+    : await safeQuery(`
     SELECT rep_id, rep_name, level_code, team_id, region, is_active
     FROM workspace.hgv_comp.dim_rep
     ORDER BY rep_name
+    LIMIT 500
   `);
 
   const warehouseMarketingReps = await safeQuery(`
     SELECT DISTINCT
-      p.rep_id,
-      COALESCE(p.rep_name, r.rep_name, p.rep_id) AS rep_name,
-      COALESCE(r.level_code, 'MKT') AS level_code,
-      COALESCE(r.team_id, 'TEAM-MKT') AS team_id,
-      COALESCE(r.region, 'West') AS region,
-      COALESCE(r.is_active, true) AS is_active
-    FROM workspace.hgv_comp.fact_marketing_rep_period p
-    LEFT JOIN workspace.hgv_comp.dim_rep r ON r.rep_id = p.rep_id
-    WHERE p.rep_id IS NOT NULL
+      rep_id,
+      COALESCE(rep_name, rep_id) AS rep_name,
+      'MKT' AS level_code,
+      COALESCE(assigned_area, 'TEAM-MKT') AS team_id,
+      COALESCE(assigned_area, 'West') AS region,
+      true AS is_active
+    FROM workspace.hgv_comp.fact_marketing_rep_period
+    WHERE rep_id IS NOT NULL
+      AND NOT rep_id LIKE 'PERSONA-MKT-%'
     ORDER BY rep_name
     LIMIT 50
   `);
@@ -53,7 +62,7 @@ export async function fetchCompMetadata(runSql: RunSql) {
           plan_id: 'PLAN-MKT-REP-2026',
           identity_group: 'marketing_channel' as const,
         }))
-      : isProductionCompDataMode()
+      : production
         ? []
         : [...MARKETING_CHANNEL_IDENTITIES];
 
@@ -78,16 +87,20 @@ export async function fetchCompMetadata(runSql: RunSql) {
 
   const reps = [...marketingIdentities, ...salesReps];
 
-  const teams = await safeQuery(`
+  const teams = production
+    ? []
+    : await safeQuery(`
     SELECT team_id, team_name, region
     FROM workspace.hgv_comp.dim_team
     ORDER BY team_name
+    LIMIT 100
   `);
 
   const periodsRaw = await safeQuery(`
     SELECT period_id, period_label, is_current
     FROM workspace.hgv_comp.dim_period
     ORDER BY period_start DESC
+    LIMIT ${METADATA_PERIOD_LIMIT}
   `);
   const periods =
     periodsRaw.length > 0
@@ -102,15 +115,20 @@ export async function fetchCompMetadata(runSql: RunSql) {
     SELECT scenario_id, scenario_name, period_id
     FROM workspace.hgv_comp.scenario_run
     ORDER BY scenario_id
+    LIMIT 50
   `);
 
-  const deals = await safeQuery(`
+  const deals = production
+    ? []
+    : await safeQuery(`
     SELECT deal_id, rep_id, credit_amount AS amount, credit_status AS status, property_display_name AS description
     FROM workspace.hgv_comp.fact_deal_credit
     LIMIT 25
   `);
 
-  const countRows = await safeQuery(`
+  const countRows = production
+    ? []
+    : await safeQuery(`
     SELECT
       (SELECT COUNT(*) FROM workspace.hgv_comp.fact_deal_credit) AS deal_count,
       (SELECT COUNT(*) FROM workspace.hgv_comp.fact_payout) AS payout_count
