@@ -1,0 +1,213 @@
+[DBG]: PS C:\Users\jbarso\Downloads\hgv-comp-app-edw_dev_hris>> npm start
+
+> hilton-kb-chat@1.0.0 start
+> cross-env NODE_ENV=production node --env-file-if-exists=./.env ./dist/server.js
+
+[appkit:server] Server running on http://0.0.0.0:8000
+[appkit:server] Mode: production (static)
+Seeding marketing team roster (at-risk, top, ramp, regional mix)...
+Seeding sales diversity (at-risk rep, FFS mix, open tours)...
+Seeding comp admin finance tables...
+node.exe : admin finance seed row skipped: [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_comp_admin_log', not enough
+data columns; target table has 9 column(s) but the inserted data has 8 column(s).
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (admin finance s...as 8 column(s).:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+node.exe : admin finance seed row skipped: [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_comp_admin_log', not enough
+
+data columns; target table has 9 column(s) but the inserted data has 8 column(s).
+At line:1 char:1
++ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (admin finance s...as 8 column(s).:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+
+tour payout column guest_id skipped: [FIELD_ALREADY_EXISTS] Cannot add column, because `guest_id` already exists in "STRUCT<tour_id: STRING NOT NULL,
+rep_id: STRING NOT NULL, period_id: STRING NOT NULL, guest_name: STRING, guest_type: STRING, arrival_date: DATE, tour_status: STRING, code: STRING,
+tour payout column guest_id skipped: [FIELD_ALREADY_EXISTS] Cannot add column, because `guest_id` already exists in "STRUCT<tour_id: STRING NOT NULL,
+rep_id: STRING NOT NULL, period_id: STRING NOT NULL, guest_name: STRING, guest_type: STRING, arrival_date: DATE, tour_status: STRING, code: STRING,
+payout: DECIMAL(14,2), fps_eligible: BOOLEAN, fps_potential: DECIMAL(14,2), notes: STRING, guest_id: STRING, household_id: STRING,
+payout: DECIMAL(14,2), fps_eligible: BOOLEAN, fps_potential: DECIMAL(14,2), notes: STRING, guest_id: STRING, household_id: STRING,
+planned_tour_location_id: STRING, current_stay_location_id: STRING, lead_source: STRING, abc_score: STRING, package_type: STRING, xref_tour_id: STRING,
+planned_tour_location_id: STRING, current_stay_location_id: STRING, lead_source: STRING, abc_score: STRING, package_type: STRING, xref_tour_id: STRING,
+tour_booked_date: DATE>". SQLSTATE: 42710; line 1 pos 0
+tour_booked_date: DATE>". SQLSTATE: 42710; line 1 pos 0
+tour payout column household_id skipped: [FIELD_ALREADY_EXISTS] Cannot add column, because `household_id` already exists in "STRUCT<tour_id: STRING NOT
+tour payout column household_id skipped: [FIELD_ALREADY_EXISTS] Cannot add column, because `household_id` already exists in "STRUCT<tour_id: STRING NOT
+NULL, rep_id: STRING NOT NULL, period_id: STRING NOT NULL, guest_name: STRING, guest_type: STRING, arrival_date: DATE, tour_status: STRING, code: STRING,
+NULL, rep_id: STRING NOT NULL, period_id: STRING NOT NULL, guest_name: STRING, guest_type: STRING, arrival_date: DATE, tour_status: STRING, code: STRING,
+payout: DECIMAL(14,2), fps_eligible: BOOLEAN, fps_potential: DECIMAL(14,2), notes: STRING, guest_id: STRING, household_id: STRING,
+planned_tour_location_id: STRING, current_stay_location_id: STRING, lead_source: STRING, abc_score: STRING, package_type: STRING, xref_tour_id: STRING,
+tour_booked_date: DATE>". SQLSTATE: 42710; line 1 pos 0
+payout: DECIMAL(14,2), fps_eligible: BOOLEAN, fps_potential: DECIMAL(14,2), notes: STRING, guest_id: STRING, household_id: STRING,
+planned_tour_location_id: STRING, current_stay_location_id: STRING, lead_source: STRING, abc_score: STRING, package_type: STRING, xref_tour_id: STRING,
+tour_booked_date: DATE>". SQLSTATE: 42710; line 1 pos 0
+tour payout column planned_tour_location_id skipped: [FIELD_ALREADY_EXISTS] Cannot add column, because `planned_tour_location_id` already exists in
+"STRUCT<tour_id: STRING NOT NULL, rep_id: STRING NOT NULL, period_id: STRING NOT NULL, guest_name: STRING, guest_type: STRING, arrival_date: DATE,
+tour_status: STRING, code: STRING, payout: DECIMAL(14,2), fps_eligible: BOOLEAN, fps_potential: DECIMAL(14,2), notes: STRING, guest_id: STRING,
+household_id: STRING, planned_tour_location_id: STRING, current_stay_location_id: STRING, lead_source: STRING, abc_score: STRING, package_type: STRING,
+tour payout column planned_tour_location_id skipped: [FIELD_ALREADY_EXISTS] Cannot add column, because `planned_tour_location_id` already exists in
+xref_tour_id: STRING, tour_booked_date: DATE>". SQLSTATE: 42710; line 1 pos 0
+"STRUCT<tour_id: STRING NOT NULL, rep_id: STRING NOT NULL, period_id: STRING NOT NULL, guest_name: STRING, guest_type: STRING, arrival_date: DATE,
+tour_status: STRING, code: STRING, payout: DECIMAL(14,2), fps_eligible: BOOLEAN, fps_potential: DECIMAL(14,2), notes: STRING, guest_id: STRING,
+household_id: STRING, planned_tour_location_id: STRING, current_stay_location_id: STRING, lead_source: STRING, abc_score: STRING, package_type: STRING,
+xref_tour_id: STRING, tour_booked_date: DATE>". SQLSTATE: 42710; line 1 pos 0
+tour payout column current_stay_location_id skipped: [FIELD_ALREADY_EXISTS] Cannot add column, because `current_stay_location_id` already exists in
+"STRUCT<tour_id: STRING NOT NULL, rep_id: STRING NOT NULL, period_id: STRING NOT NULL, guest_name: STRING, guest_type: STRING, arrival_date: DATE,
+tour payout column current_stay_location_id skipped: [FIELD_ALREADY_EXISTS] Cannot add column, because `current_stay_location_id` already exists in
+tour_status: STRING, code: STRING, payout: DECIMAL(14,2), fps_eligible: BOOLEAN, fps_potential: DECIMAL(14,2), notes: STRING, guest_id: STRING,
+household_id: STRING, planned_tour_location_id: STRING, current_stay_location_id: STRING, lead_source: STRING, abc_score: STRING, package_type: STRING,
+"STRUCT<tour_id: STRING NOT NULL, rep_id: STRING NOT NULL, period_id: STRING NOT NULL, guest_name: STRING, guest_type: STRING, arrival_date: DATE,
+tour_status: STRING, code: STRING, payout: DECIMAL(14,2), fps_eligible: BOOLEAN, fps_potential: DECIMAL(14,2), notes: STRING, guest_id: STRING,
+xref_tour_id: STRING, tour_booked_date: DATE>". SQLSTATE: 42710; line 1 pos 0
+household_id: STRING, planned_tour_location_id: STRING, current_stay_location_id: STRING, lead_source: STRING, abc_score: STRING, package_type: STRING,
+xref_tour_id: STRING, tour_booked_date: DATE>". SQLSTATE: 42710; line 1 pos 0
+tour payout column lead_source skipped: [FIELD_ALREADY_EXISTS] Cannot add column, because `lead_source` already exists in "STRUCT<tour_id: STRING NOT
+NULL, rep_id: STRING NOT NULL, period_id: STRING NOT NULL, guest_name: STRING, guest_type: STRING, arrival_date: DATE, tour_status: STRING, code: STRING,
+payout: DECIMAL(14,2), fps_eligible: BOOLEAN, fps_potential: DECIMAL(14,2), notes: STRING, guest_id: STRING, household_id: STRING,
+tour payout column lead_source skipped: [FIELD_ALREADY_EXISTS] Cannot add column, because `lead_source` already exists in "STRUCT<tour_id: STRING NOT
+NULL, rep_id: STRING NOT NULL, period_id: STRING NOT NULL, guest_name: STRING, guest_type: STRING, arrival_date: DATE, tour_status: STRING, code: STRING,
+planned_tour_location_id: STRING, current_stay_location_id: STRING, lead_source: STRING, abc_score: STRING, package_type: STRING, xref_tour_id: STRING,
+payout: DECIMAL(14,2), fps_eligible: BOOLEAN, fps_potential: DECIMAL(14,2), notes: STRING, guest_id: STRING, household_id: STRING,
+planned_tour_location_id: STRING, current_stay_location_id: STRING, lead_source: STRING, abc_score: STRING, package_type: STRING, xref_tour_id: STRING,
+tour_booked_date: DATE>". SQLSTATE: 42710; line 1 pos 0
+tour_booked_date: DATE>". SQLSTATE: 42710; line 1 pos 0
+tour payout column abc_score skipped: [FIELD_ALREADY_EXISTS] Cannot add column, because `abc_score` already exists in "STRUCT<tour_id: STRING NOT NULL,
+rep_id: STRING NOT NULL, period_id: STRING NOT NULL, guest_name: STRING, guest_type: STRING, arrival_date: DATE, tour_status: STRING, code: STRING,
+payout: DECIMAL(14,2), fps_eligible: BOOLEAN, fps_potential: DECIMAL(14,2), notes: STRING, guest_id: STRING, household_id: STRING,
+planned_tour_location_id: STRING, current_stay_location_id: STRING, lead_source: STRING, abc_score: STRING, package_type: STRING, xref_tour_id: STRING,
+tour_booked_date: DATE>". SQLSTATE: 42710; line 1 pos 0
+tour payout column abc_score skipped: [FIELD_ALREADY_EXISTS] Cannot add column, because `abc_score` already exists in "STRUCT<tour_id: STRING NOT NULL,
+rep_id: STRING NOT NULL, period_id: STRING NOT NULL, guest_name: STRING, guest_type: STRING, arrival_date: DATE, tour_status: STRING, code: STRING,
+payout: DECIMAL(14,2), fps_eligible: BOOLEAN, fps_potential: DECIMAL(14,2), notes: STRING, guest_id: STRING, household_id: STRING,
+planned_tour_location_id: STRING, current_stay_location_id: STRING, lead_source: STRING, abc_score: STRING, package_type: STRING, xref_tour_id: STRING,
+tour_booked_date: DATE>". SQLSTATE: 42710; line 1 pos 0
+tour payout column package_type skipped: [FIELD_ALREADY_EXISTS] Cannot add column, because `package_type` already exists in "STRUCT<tour_id: STRING NOT
+NULL, rep_id: STRING NOT NULL, period_id: STRING NOT NULL, guest_name: STRING, guest_type: STRING, arrival_date: DATE, tour_status: STRING, code: STRING,
+payout: DECIMAL(14,2), fps_eligible: BOOLEAN, fps_potential: DECIMAL(14,2), notes: STRING, guest_id: STRING, household_id: STRING,
+planned_tour_location_id: STRING, current_stay_location_id: STRING, lead_source: STRING, abc_score: STRING, package_type: STRING, xref_tour_id: STRING,
+tour payout column package_type skipped: [FIELD_ALREADY_EXISTS] Cannot add column, because `package_type` already exists in "STRUCT<tour_id: STRING NOT
+tour_booked_date: DATE>". SQLSTATE: 42710; line 1 pos 0
+NULL, rep_id: STRING NOT NULL, period_id: STRING NOT NULL, guest_name: STRING, guest_type: STRING, arrival_date: DATE, tour_status: STRING, code: STRING,
+payout: DECIMAL(14,2), fps_eligible: BOOLEAN, fps_potential: DECIMAL(14,2), notes: STRING, guest_id: STRING, household_id: STRING,
+planned_tour_location_id: STRING, current_stay_location_id: STRING, lead_source: STRING, abc_score: STRING, package_type: STRING, xref_tour_id: STRING,
+tour_booked_date: DATE>". SQLSTATE: 42710; line 1 pos 0
+tour payout column xref_tour_id skipped: [FIELD_ALREADY_EXISTS] Cannot add column, because `xref_tour_id` already exists in "STRUCT<tour_id: STRING NOT
+NULL, rep_id: STRING NOT NULL, period_id: STRING NOT NULL, guest_name: STRING, guest_type: STRING, arrival_date: DATE, tour_status: STRING, code: STRING,
+payout: DECIMAL(14,2), fps_eligible: BOOLEAN, fps_potential: DECIMAL(14,2), notes: STRING, guest_id: STRING, household_id: STRING,
+planned_tour_location_id: STRING, current_stay_location_id: STRING, lead_source: STRING, abc_score: STRING, package_type: STRING, xref_tour_id: STRING,
+tour_booked_date: DATE>". SQLSTATE: 42710; line 1 pos 0
+tour payout column xref_tour_id skipped: [FIELD_ALREADY_EXISTS] Cannot add column, because `xref_tour_id` already exists in "STRUCT<tour_id: STRING NOT
+NULL, rep_id: STRING NOT NULL, period_id: STRING NOT NULL, guest_name: STRING, guest_type: STRING, arrival_date: DATE, tour_status: STRING, code: STRING,
+payout: DECIMAL(14,2), fps_eligible: BOOLEAN, fps_potential: DECIMAL(14,2), notes: STRING, guest_id: STRING, household_id: STRING,
+planned_tour_location_id: STRING, current_stay_location_id: STRING, lead_source: STRING, abc_score: STRING, package_type: STRING, xref_tour_id: STRING,
+tour_booked_date: DATE>". SQLSTATE: 42710; line 1 pos 0
+tour payout column tour_booked_date skipped: [FIELD_ALREADY_EXISTS] Cannot add column, because `tour_booked_date` already exists in "STRUCT<tour_id:
+STRING NOT NULL, rep_id: STRING NOT NULL, period_id: STRING NOT NULL, guest_name: STRING, guest_type: STRING, arrival_date: DATE, tour_status: STRING,
+code: STRING, payout: DECIMAL(14,2), fps_eligible: BOOLEAN, fps_potential: DECIMAL(14,2), notes: STRING, guest_id: STRING, household_id: STRING,
+planned_tour_location_id: STRING, current_stay_location_id: STRING, lead_source: STRING, abc_score: STRING, package_type: STRING, xref_tour_id: STRING,
+tour payout column tour_booked_date skipped: [FIELD_ALREADY_EXISTS] Cannot add column, because `tour_booked_date` already exists in "STRUCT<tour_id:
+STRING NOT NULL, rep_id: STRING NOT NULL, period_id: STRING NOT NULL, guest_name: STRING, guest_type: STRING, arrival_date: DATE, tour_status: STRING,
+code: STRING, payout: DECIMAL(14,2), fps_eligible: BOOLEAN, fps_potential: DECIMAL(14,2), notes: STRING, guest_id: STRING, household_id: STRING,
+planned_tour_location_id: STRING, current_stay_location_id: STRING, lead_source: STRING, abc_score: STRING, package_type: STRING, xref_tour_id: STRING,
+tour_booked_date: DATE>". SQLSTATE: 42710; line 1 pos 0
+tour_booked_date: DATE>". SQLSTATE: 42710; line 1 pos 0
+Seeding guest registry spine...
+Seeding workspace.hgv_comp.industry_comp_benchmark...
+Seeding workspace.hgv_comp.fact_regional_bonus_area...
+Seeding workspace.hgv_comp.fact_marketing_rep_period...
+Marketing seed skipped: [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_marketing_tour_payout', not enough data columns;
+target table has 21 column(s) but the inserted data has 12 column(s).
+Marketing seed skipped: [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_marketing_tour_payout', not enough data columns;
+target table has 21 column(s) but the inserted data has 12 column(s).
+Seeding workspace.hgv_comp.plan_assessment_profile...
+Seeding dim_plan_component for UI plan-component questions...
+Seeding scenario_run / scenario_result for comp analysis & finance prompts...
+catalog seed skipped (SCN-BASELINE): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.scenario_run', not enough data columns;
+target table has 10 column(s) but the inserted data has 9 column(s).
+catalog seed skipped (SCN-BASELINE): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.scenario_run', not enough data columns;
+target table has 10 column(s) but the inserted data has 9 column(s).
+catalog seed skipped (SCN-SIM-01): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.scenario_run', not enough data columns;
+catalog seed skipped (SCN-SIM-01): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.scenario_run', not enough data columns;
+target table has 10 column(s) but the inserted data has 9 column(s).
+target table has 10 column(s) but the inserted data has 9 column(s).
+catalog seed skipped (SCN-PLAN-A): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.scenario_run', not enough data columns;
+target table has 10 column(s) but the inserted data has 9 column(s).
+catalog seed skipped (SCN-PLAN-A): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.scenario_run', not enough data columns;
+target table has 10 column(s) but the inserted data has 9 column(s).
+catalog seed skipped (SCN-SPIFF-Q1): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.scenario_run', not enough data columns;
+target table has 10 column(s) but the inserted data has 9 column(s).
+catalog seed skipped (SCN-SPIFF-Q1): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.scenario_run', not enough data columns;
+target table has 10 column(s) but the inserted data has 9 column(s).
+catalog seed skipped (SCN-LOA-ADJ): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.scenario_run', not enough data columns;
+catalog seed skipped (SCN-LOA-ADJ): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.scenario_run', not enough data columns;
+target table has 10 column(s) but the inserted data has 9 column(s).
+target table has 10 column(s) but the inserted data has 9 column(s).
+catalog seed skipped (SCN-HIGH-RAMP): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.scenario_run', not enough data columns;
+target table has 10 column(s) but the inserted data has 9 column(s).
+catalog seed skipped (SCN-HIGH-RAMP): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.scenario_run', not enough data columns;
+target table has 10 column(s) but the inserted data has 9 column(s).
+catalog seed skipped (SCN-NOI-PROT): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.scenario_run', not enough data columns;
+target table has 10 column(s) but the inserted data has 9 column(s).
+catalog seed skipped (SCN-NOI-PROT): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.scenario_run', not enough data columns;
+target table has 10 column(s) but the inserted data has 9 column(s).
+Seeding semantic_definitions for governed metric grounding...
+catalog seed skipped (ADMEVT-0008): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_comp_admin_log', not enough data
+columns; target table has 9 column(s) but the inserted data has 8 column(s).
+catalog seed skipped (ADMEVT-0008): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_comp_admin_log', not enough data
+columns; target table has 9 column(s) but the inserted data has 8 column(s).
+catalog seed skipped (ADMEVT-0009): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_comp_admin_log', not enough data
+columns; target table has 9 column(s) but the inserted data has 8 column(s).
+catalog seed skipped (ADMEVT-0009): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_comp_admin_log', not enough data
+columns; target table has 9 column(s) but the inserted data has 8 column(s).
+catalog seed skipped (ADMEVT-0010): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_comp_admin_log', not enough data
+columns; target table has 9 column(s) but the inserted data has 8 column(s).
+catalog seed skipped (ADMEVT-0010): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_comp_admin_log', not enough data
+columns; target table has 9 column(s) but the inserted data has 8 column(s).
+catalog seed skipped (ADMEVT-0011): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_comp_admin_log', not enough data
+columns; target table has 9 column(s) but the inserted data has 8 column(s).
+catalog seed skipped (ADMEVT-0011): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_comp_admin_log', not enough data
+columns; target table has 9 column(s) but the inserted data has 8 column(s).
+catalog seed skipped (ADMEVT-0012): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_comp_admin_log', not enough data
+columns; target table has 9 column(s) but the inserted data has 8 column(s).
+catalog seed skipped (ADMEVT-0012): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_comp_admin_log', not enough data
+columns; target table has 9 column(s) but the inserted data has 8 column(s).
+catalog seed skipped (ADMEVT-0013): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_comp_admin_log', not enough data
+columns; target table has 9 column(s) but the inserted data has 8 column(s).
+catalog seed skipped (ADMEVT-0013): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_comp_admin_log', not enough data
+columns; target table has 9 column(s) but the inserted data has 8 column(s).
+catalog seed skipped (ADMEVT-0014): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_comp_admin_log', not enough data
+columns; target table has 9 column(s) but the inserted data has 8 column(s).
+catalog seed skipped (ADMEVT-0014): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_comp_admin_log', not enough data
+columns; target table has 9 column(s) but the inserted data has 8 column(s).
+Seeding sales fact_tour_quality corpus for finance & manager prompts...
+Seeding marketing tour ledger for PERSONA-MKT-REP...
+catalog seed skipped (PERSONA-MKT-REP-T-55122): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_marketing_tour_payout',
+not enough data columns; target table has 21 column(s) but the inserted data has 12 column(s).
+catalog seed skipped (PERSONA-MKT-REP-T-55122): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_marketing_tour_payout',
+not enough data columns; target table has 21 column(s) but the inserted data has 12 column(s).
+catalog seed skipped (PERSONA-MKT-REP-T-55204): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_marketing_tour_payout',
+not enough data columns; target table has 21 column(s) but the inserted data has 12 column(s).
+catalog seed skipped (PERSONA-MKT-REP-T-55204): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_marketing_tour_payout',
+not enough data columns; target table has 21 column(s) but the inserted data has 12 column(s).
+catalog seed skipped (PERSONA-MKT-REP-T-55180): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_marketing_tour_payout',
+not enough data columns; target table has 21 column(s) but the inserted data has 12 column(s).
+catalog seed skipped (PERSONA-MKT-REP-T-55180): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_marketing_tour_payout',
+not enough data columns; target table has 21 column(s) but the inserted data has 12 column(s).
+Seeding marketing tour ledger for MKT-REP-001...
+catalog seed skipped (MKT-REP-001-T-55122): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_marketing_tour_payout', not
+enough data columns; target table has 21 column(s) but the inserted data has 12 column(s).
+catalog seed skipped (MKT-REP-001-T-55122): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_marketing_tour_payout', not
+enough data columns; target table has 21 column(s) but the inserted data has 12 column(s).
+catalog seed skipped (MKT-REP-001-T-55204): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_marketing_tour_payout', not
+enough data columns; target table has 21 column(s) but the inserted data has 12 column(s).
+catalog seed skipped (MKT-REP-001-T-55204): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_marketing_tour_payout', not
+enough data columns; target table has 21 column(s) but the inserted data has 12 column(s).
+catalog seed skipped (MKT-REP-001-T-55180): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_marketing_tour_payout', not
+enough data columns; target table has 21 column(s) but the inserted data has 12 column(s).
+catalog seed skipped (MKT-REP-001-T-55180): [DELTA_INSERT_COLUMN_ARITY_MISMATCH] Cannot write to 'edw_dev_hris.hgv_comp.fact_marketing_tour_payout', not
+enough data columns; target table has 21 column(s) but the inserted data has 12 column(s).
+Seeding call-center credit ledger for C1 persona questions...
+Seeding prior-period facts for quarter-over-quarter copilot prompts...

@@ -1,13 +1,8 @@
 -- One-shot DDL bootstrap for edw_dev_hris.hgv_comp
-
 -- Paste into SQL Editor and Run All, or use scripts/setup-comp-data-edw-dev-hris.ps1
-
 -- Catalog edw_dev_hris must already exist.
 
-
-
 -- ----- 01_create_schema.sql -----
-
 -- Catalog: edw_dev_hris | Schema: hgv_comp
 --
 -- HGV Sales Compensation — star schema DDL
