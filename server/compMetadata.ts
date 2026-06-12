@@ -23,14 +23,57 @@ export async function fetchCompMetadata(runSql: RunSql) {
     ORDER BY rep_name
   `);
 
-  const reps = [
-    ...MARKETING_CHANNEL_IDENTITIES,
-    ...dbReps.map((r) => ({
-      ...r,
-      role_title: String(r.rep_id).includes('MGR') || r.level_code === 'L9' ? 'Sales Manager' : 'Sales Executive',
-      identity_group: String(r.rep_id).includes('MGR') || r.level_code === 'L9' ? 'sales_manager' : 'sales_executive',
-    })),
-  ];
+  const warehouseMarketingReps = await safeQuery(`
+    SELECT DISTINCT
+      p.rep_id,
+      COALESCE(p.rep_name, r.rep_name, p.rep_id) AS rep_name,
+      COALESCE(r.level_code, 'MKT') AS level_code,
+      COALESCE(r.team_id, 'TEAM-MKT') AS team_id,
+      COALESCE(r.region, 'West') AS region,
+      COALESCE(r.is_active, true) AS is_active
+    FROM workspace.hgv_comp.fact_marketing_rep_period p
+    LEFT JOIN workspace.hgv_comp.dim_rep r ON r.rep_id = p.rep_id
+    WHERE p.rep_id IS NOT NULL
+    ORDER BY rep_name
+    LIMIT 50
+  `);
+
+  const marketingIdentities =
+    warehouseMarketingReps.length > 0
+      ? warehouseMarketingReps.map((r) => ({
+          rep_id: String(r.rep_id),
+          rep_name: String(r.rep_name),
+          level_code: String(r.level_code),
+          team_id: String(r.team_id),
+          region: String(r.region),
+          is_active: r.is_active === true || r.is_active === 'true',
+          role_title: 'Marketing Representative',
+          persona_id: 'marketing_rep',
+          plan_id: 'PLAN-MKT-REP-2026',
+          identity_group: 'marketing_channel' as const,
+        }))
+      : [...MARKETING_CHANNEL_IDENTITIES];
+
+  const marketingIds = new Set(marketingIdentities.map((r) => r.rep_id));
+
+  const salesReps = dbReps
+    .filter((r) => !marketingIds.has(String(r.rep_id)))
+    .map((r) => ({
+      rep_id: String(r.rep_id),
+      rep_name: String(r.rep_name),
+      level_code: String(r.level_code),
+      team_id: String(r.team_id),
+      region: String(r.region),
+      is_active: r.is_active === true || r.is_active === 'true',
+      role_title:
+        String(r.rep_id).includes('MGR') || r.level_code === 'L9' ? 'Sales Manager' : 'Sales Executive',
+      identity_group:
+        String(r.rep_id).includes('MGR') || r.level_code === 'L9'
+          ? ('sales_manager' as const)
+          : ('sales_executive' as const),
+    }));
+
+  const reps = [...marketingIdentities, ...salesReps];
 
   const teams = await safeQuery(`
     SELECT team_id, team_name, region
@@ -43,9 +86,14 @@ export async function fetchCompMetadata(runSql: RunSql) {
     FROM workspace.hgv_comp.dim_period
     ORDER BY period_start DESC
   `);
-  const allowedPeriodIds = new Set(DEFAULT_PERIODS.map((p) => p.period_id));
-  const filteredPeriods = periodsRaw.filter((p) => allowedPeriodIds.has(String(p.period_id)));
-  const periods = filteredPeriods.length > 0 ? filteredPeriods : periodsRaw.length > 0 ? periodsRaw : [...DEFAULT_PERIODS];
+  const periods =
+    periodsRaw.length > 0
+      ? periodsRaw.map((p) => ({
+          period_id: String(p.period_id),
+          period_label: String(p.period_label),
+          is_current: p.is_current === true || p.is_current === 'true',
+        }))
+      : [...DEFAULT_PERIODS];
 
   const scenarios = await safeQuery(`
     SELECT scenario_id, scenario_name, period_id

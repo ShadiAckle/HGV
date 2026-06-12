@@ -70,9 +70,21 @@ export function isMarketingChannelRepId(repId: string): boolean {
   return repId.startsWith('PERSONA-MKT-');
 }
 
-export function getMarketingPersonaId(repId: string): MarketingPersonaId | null {
+export function isMarketingChannelIdentity(
+  rep: Pick<RepIdentity, 'rep_id' | 'identity_group'>,
+): boolean {
+  return rep.identity_group === 'marketing_channel' || isMarketingChannelRepId(rep.rep_id);
+}
+
+export function getMarketingPersonaId(
+  repId: string,
+  rep?: Pick<RepIdentity, 'persona_id' | 'identity_group'> | null,
+): MarketingPersonaId | null {
+  if (rep?.persona_id) return rep.persona_id as MarketingPersonaId;
   const match = MARKETING_CHANNEL_IDENTITIES.find((i) => i.rep_id === repId);
-  return match?.persona_id ?? null;
+  if (match) return match.persona_id;
+  if (rep?.identity_group === 'marketing_channel') return 'marketing_rep';
+  return null;
 }
 
 export function resolveRoleTitle(rep: Pick<RepIdentity, 'rep_id' | 'level_code'> & { role_title?: string }): string {
@@ -103,7 +115,9 @@ export function sortIdentitiesForDropdown(reps: RepIdentity[]): RepIdentity[] {
 }
 
 /** Identity picker — marketing channel plans only (slides 40–42). */
-export function getMarketingDropdownIdentities(): RepIdentity[] {
+export function getMarketingDropdownIdentities(reps?: RepIdentity[]): RepIdentity[] {
+  const fromWarehouse = (reps ?? []).filter((r) => isMarketingChannelIdentity(r));
+  if (fromWarehouse.length > 0) return fromWarehouse;
   return [...MARKETING_CHANNEL_IDENTITIES];
 }
 

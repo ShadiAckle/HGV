@@ -198,7 +198,7 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
 
         const storedPeriod = localStorage.getItem('hgv_active_period_id');
         const currentPeriod = periods.find((p) => p.is_current);
-        const legacyPeriods = new Set([LEGACY_PERIOD_ID, LEGACY_PRIOR_PERIOD_ID]);
+        const legacyPeriods = new Set([LEGACY_PERIOD_ID, LEGACY_PRIOR_PERIOD_ID, '2024-Q2', '2024-Q1']);
         const validStored =
           storedPeriod &&
           !legacyPeriods.has(storedPeriod) &&
@@ -211,6 +211,19 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
         } else if (periods[0]) {
           setActivePeriodId(periods[0].period_id);
           localStorage.setItem('hgv_active_period_id', periods[0].period_id);
+        }
+
+        const marketingFromMeta = getMarketingDropdownIdentities(data.reps ?? []);
+        const storedRep = localStorage.getItem('hgv_active_rep_id');
+        const validStoredRep =
+          storedRep && marketingFromMeta.some((r) => r.rep_id === storedRep);
+        if (!validStoredRep && marketingFromMeta[0]) {
+          setActiveRepId(marketingFromMeta[0].rep_id);
+          localStorage.setItem('hgv_active_rep_id', marketingFromMeta[0].rep_id);
+          if (marketingFromMeta[0].team_id) {
+            setActiveTeamId(marketingFromMeta[0].team_id);
+            localStorage.setItem('hgv_active_team_id', marketingFromMeta[0].team_id);
+          }
         }
       } else {
         throw new Error(`HTTP ${res.status} retrieving metadata`);
@@ -233,7 +246,10 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const marketingReps = useMemo(() => getMarketingDropdownIdentities(), []);
+  const marketingReps = useMemo(
+    () => getMarketingDropdownIdentities(metadata?.reps ?? []),
+    [metadata?.reps],
+  );
 
   const activeRepMetadata = useMemo(() => {
     return marketingReps.find((r) => r.rep_id === activeRepId);
@@ -244,9 +260,15 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
     return 'Marketing Representative';
   }, [activeRepMetadata]);
 
-  const activePersonaId = useMemo(() => getMarketingPersonaId(activeRepId), [activeRepId]);
+  const activePersonaId = useMemo(
+    () => getMarketingPersonaId(activeRepId, activeRepMetadata),
+    [activeRepId, activeRepMetadata],
+  );
 
-  const isMarketingChannel = isMarketingChannelRepId(activeRepId);
+  const isMarketingChannel = useMemo(
+    () => marketingReps.some((r) => r.rep_id === activeRepId),
+    [marketingReps, activeRepId],
+  );
 
   const identityGroup: IdentityGroup = useMemo(() => {
     if (isMarketingChannel) return 'marketing_channel';
@@ -294,14 +316,15 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  // Ensure active identity stays on a marketing plan persona
+  // Ensure active identity is a valid marketing rep from metadata (warehouse or demo personas)
   useEffect(() => {
-    if (loadingMetadata) return;
-    if (!isMarketingChannelRepId(activeRepId)) {
-      setActiveRepId(DEFAULT_MARKETING_REP_ID);
-      localStorage.setItem('hgv_active_rep_id', DEFAULT_MARKETING_REP_ID);
+    if (loadingMetadata || marketingReps.length === 0) return;
+    if (!marketingReps.some((r) => r.rep_id === activeRepId)) {
+      const next = marketingReps[0].rep_id;
+      setActiveRepId(next);
+      localStorage.setItem('hgv_active_rep_id', next);
     }
-  }, [loadingMetadata, activeRepId]);
+  }, [loadingMetadata, activeRepId, marketingReps]);
 
   // Role-based Simple View default (reps on, managers off) until user toggles manually
   useEffect(() => {
@@ -316,7 +339,7 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
   }, [loadingMetadata, isManager, activePersonaId]);
 
   const changeActiveRep = (repId: string) => {
-    if (!isMarketingChannelRepId(repId)) return;
+    if (!marketingReps.some((r) => r.rep_id === repId)) return;
     setActiveRepId(repId);
     localStorage.setItem('hgv_active_rep_id', repId);
 
