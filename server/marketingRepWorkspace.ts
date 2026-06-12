@@ -115,7 +115,20 @@ export async function buildMarketingRepWorkspace(
   ]);
 
   if (!periodRows.length) {
-    throw new Error(`No marketing rep comp data for ${repId} / ${periodId}. Run comp schema bootstrap.`);
+    const latest = await runSql(`
+      SELECT period_id FROM workspace.hgv_comp.fact_marketing_rep_period
+      WHERE rep_id = '${safeRep}'
+      ORDER BY period_id DESC
+      LIMIT 1
+    `);
+    const latestId = latest[0]?.period_id ? String(latest[0].period_id) : '';
+    if (latestId && latestId !== periodId) {
+      return buildMarketingRepWorkspace(runSql, repId, latestId);
+    }
+    throw new Error(
+      `No marketing rep comp data for ${repId} / ${periodId}. ` +
+        `Choose a marketing rep and period from the header (live warehouse data).`,
+    );
   }
 
   const p = periodRows[0];

@@ -1,11 +1,8 @@
 import { createContext, useContext, useEffect, useState, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import {
-  DEFAULT_MARKETING_REP_ID,
   getMarketingDropdownIdentities,
   getMarketingPersonaId,
-  isMarketingChannelRepId,
-  MARKETING_CHANNEL_IDENTITIES,
   mergeMarketingIdentities,
   resolveRoleTitle,
   type IdentityGroup,
@@ -123,13 +120,14 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export function AppContextProvider({ children }: { children: ReactNode }) {
   const [activeRepId, setActiveRepId] = useState(() => {
     const cached = localStorage.getItem('hgv_active_rep_id');
-    return cached && isMarketingChannelRepId(cached) ? cached : DEFAULT_MARKETING_REP_ID;
+    // Demo personas (PERSONA-MKT-*) are invalid for live warehouse — metadata will replace.
+    if (cached && !cached.startsWith('PERSONA-MKT-')) return cached;
+    return '';
   });
   const [activeTeamId, setActiveTeamId] = useState(() => {
     const cached = localStorage.getItem('hgv_active_team_id');
     if (cached) return cached;
-    const defaultRep = MARKETING_CHANNEL_IDENTITIES.find((r) => r.rep_id === DEFAULT_MARKETING_REP_ID);
-    return defaultRep?.team_id ?? 'TEAM-MKT-LAS';
+    return 'TEAM-MKT';
   });
   const [activePeriodId, setActivePeriodId] = useState(() => localStorage.getItem('hgv_active_period_id') || '');
   const [activeScenarioId, setActiveScenarioId] = useState(() => localStorage.getItem('hgv_active_scenario_id') || 'SCN-SIM-01');
@@ -160,19 +158,7 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
         // This ensures the deployed Databricks user always maps to the correct rep.
         // If a user has manually switched via the dropdown, that localStorage value wins
         // only for the session — a page reload will re-sync from the server.
-        // Persona picker is marketing-channel only — keep cached marketing selection; ignore server sales rep mapping.
-        const cachedRep = localStorage.getItem('hgv_active_rep_id');
-        if (cachedRep && isMarketingChannelRepId(cachedRep)) {
-          setActiveRepId(cachedRep);
-        } else {
-          setActiveRepId(DEFAULT_MARKETING_REP_ID);
-          localStorage.setItem('hgv_active_rep_id', DEFAULT_MARKETING_REP_ID);
-          const defaultRep = MARKETING_CHANNEL_IDENTITIES.find((r) => r.rep_id === DEFAULT_MARKETING_REP_ID);
-          if (defaultRep) {
-            setActiveTeamId(defaultRep.team_id);
-            localStorage.setItem('hgv_active_team_id', defaultRep.team_id);
-          }
-        }
+        // Active marketing rep comes from warehouse metadata (fetchMetadata), not demo personas.
       } else {
         throw new Error(`HTTP ${res.status} retrieving profile`);
       }
@@ -192,10 +178,11 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
       if (res.ok) {
         const data = (await res.json()) as AppMetadata;
         const periods = data.periods?.length ? data.periods : MOCK_PERIODS;
+        const mergedReps = mergeMarketingIdentities(data.reps ?? []);
         setMetadata({
           ...data,
           periods,
-          reps: mergeMarketingIdentities(data.reps ?? []),
+          reps: mergedReps,
         });
 
         const storedPeriod = localStorage.getItem('hgv_active_period_id');
@@ -215,17 +202,21 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
           localStorage.setItem('hgv_active_period_id', periods[0].period_id);
         }
 
-        const marketingFromMeta = getMarketingDropdownIdentities(data.reps ?? []);
+        const marketingFromMeta = getMarketingDropdownIdentities(mergedReps);
         const storedRep = localStorage.getItem('hgv_active_rep_id');
-        const validStoredRep =
-          storedRep && marketingFromMeta.some((r) => r.rep_id === storedRep);
-        if (!validStoredRep && marketingFromMeta[0]) {
+        const storedRepValid =
+          storedRep &&
+          !storedRep.startsWith('PERSONA-MKT-') &&
+          marketingFromMeta.some((r) => r.rep_id === storedRep);
+        if (!storedRepValid && marketingFromMeta[0]) {
           setActiveRepId(marketingFromMeta[0].rep_id);
           localStorage.setItem('hgv_active_rep_id', marketingFromMeta[0].rep_id);
           if (marketingFromMeta[0].team_id) {
             setActiveTeamId(marketingFromMeta[0].team_id);
             localStorage.setItem('hgv_active_team_id', marketingFromMeta[0].team_id);
           }
+        } else if (storedRepValid) {
+          setActiveRepId(storedRep);
         }
       } else {
         throw new Error(`HTTP ${res.status} retrieving metadata`);
@@ -318,15 +309,38 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const legacyPeriodIds = useMemo(
+    () => new Set([LEGACY_PERIOD_ID, LEGACY_PRIOR_PERIOD_ID, '2024-Q1', '2024-Q2', '2024-Q3', '2024-Q4']),
+    [],
+  );
+
   // Ensure active identity is a valid marketing rep from metadata (warehouse or demo personas)
   useEffect(() => {
     if (loadingMetadata || marketingReps.length === 0) return;
-    if (!marketingReps.some((r) => r.rep_id === activeRepId)) {
+    const repInvalid =
+      !activeRepId ||
+      activeRepId.startsWith('PERSONA-MKT-') ||
+      !marketingReps.some((r) => r.rep_id === activeRepId);
+    if (repInvalid) {
       const next = marketingReps[0].rep_id;
       setActiveRepId(next);
       localStorage.setItem('hgv_active_rep_id', next);
     }
   }, [loadingMetadata, activeRepId, marketingReps]);
+
+  useEffect(() => {
+    if (loadingMetadata || !metadata?.periods?.length) return;
+    const periodInvalid =
+      !activePeriodId ||
+      legacyPeriodIds.has(activePeriodId) ||
+      !metadata.periods.some((p) => p.period_id === activePeriodId);
+    if (periodInvalid) {
+      const next =
+        metadata.periods.find((p) => p.is_current)?.period_id ?? metadata.periods[0].period_id;
+      setActivePeriodId(next);
+      localStorage.setItem('hgv_active_period_id', next);
+    }
+  }, [loadingMetadata, activePeriodId, metadata?.periods, legacyPeriodIds]);
 
   // Role-based Simple View default (reps on, managers off) until user toggles manually
   useEffect(() => {
