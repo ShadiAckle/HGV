@@ -5,7 +5,6 @@ $ErrorActionPreference = 'Stop'
 $Root = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { Get-Location }
 Set-Location $Root
 
-$hostUrl = 'https://adb-7405610243855520.0.azuredatabricks.net'
 $profile = 'hgv-edw'
 
 function Load-DotEnv {
@@ -23,6 +22,12 @@ function Load-DotEnv {
 }
 
 Load-DotEnv (Join-Path $Root '.env')
+
+$hostUrl = if ($env:DATABRICKS_HOST) { $env:DATABRICKS_HOST.Trim().TrimEnd('/') } else { '' }
+if (-not $hostUrl -or $hostUrl -match 'REPLACE-WITH') {
+  Write-Host 'Set DATABRICKS_HOST in .env to your workspace URL (copy from VDI browser address bar).' -ForegroundColor Red
+  exit 1
+}
 
 $appkit = Join-Path $Root 'node_modules\@databricks\appkit\package.json'
 if (-not (Test-Path $appkit)) {
@@ -54,7 +59,7 @@ $token = ($tokenJson | ConvertFrom-Json).access_token
 if (-not $token) { throw 'No access_token in databricks auth token output' }
 
 $env:NODE_ENV = 'production'
-$env:DATABRICKS_HOST = if ($env:DATABRICKS_HOST) { $env:DATABRICKS_HOST } else { $hostUrl }
+$env:DATABRICKS_HOST = $hostUrl
 $env:DATABRICKS_TOKEN = $token
 Remove-Item Env:DATABRICKS_CONFIG_PROFILE -ErrorAction SilentlyContinue
 
