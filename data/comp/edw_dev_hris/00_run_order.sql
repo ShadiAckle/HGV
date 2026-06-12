@@ -13,7 +13,11 @@
 --   09_alter_scenario_tour_volume.sql
 --   11_alter_scenario_conversion.sql
 --
--- Optional demo seeds (skip for real data):
+-- Production live data (replaces synthetic fact/dim TABLES with VIEWS over Cognos ETL):
+--   12_bootstrap_live_source_views.sql
+--   (run AFTER 00_bootstrap_all_ddl.sql, SKIP demo seeds below)
+--
+-- Optional demo seeds (skip when using 12_bootstrap_live_source_views.sql):
 --   02_seed_synthetic_data.sql, 02a_seed_core_dims.sql, 02b_seed_sales_core.sql,
 --   02c_seed_sales_diversity.sql, 04_seed_semantic_definitions.sql,
 --   05a_seed_admin_finance.sql, 06a_seed_marketing_benchmark.sql,
