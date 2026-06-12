@@ -102,6 +102,10 @@ export function resolveIdentityGroup(repId: string, levelCode: string): Identity
 }
 
 export function mergeMarketingIdentities(reps: RepIdentity[]): RepIdentity[] {
+  const hasLiveMarketing = reps.some(
+    (r) => r.identity_group === 'marketing_channel' && !isMarketingChannelRepId(r.rep_id),
+  );
+  if (hasLiveMarketing) return reps;
   const dbIds = new Set(reps.map((r) => r.rep_id));
   const marketing = MARKETING_CHANNEL_IDENTITIES.filter((m) => !dbIds.has(m.rep_id));
   return [...marketing, ...reps];

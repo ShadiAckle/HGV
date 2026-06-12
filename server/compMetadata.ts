@@ -1,3 +1,4 @@
+import { isProductionCompDataMode } from '../shared/compCatalog.js';
 import { DEFAULT_PERIODS } from '../shared/compPeriods.js';
 
 type RunSql = (sql: string) => Promise<Record<string, unknown>[]>;
@@ -52,7 +53,9 @@ export async function fetchCompMetadata(runSql: RunSql) {
           plan_id: 'PLAN-MKT-REP-2026',
           identity_group: 'marketing_channel' as const,
         }))
-      : [...MARKETING_CHANNEL_IDENTITIES];
+      : isProductionCompDataMode()
+        ? []
+        : [...MARKETING_CHANNEL_IDENTITIES];
 
   const marketingIds = new Set(marketingIdentities.map((r) => r.rep_id));
 

@@ -9,7 +9,7 @@ import { AdminConsolePage } from './pages/admin/AdminConsolePage';
 import { CompAdminPage } from './pages/comp/CompAdminPage';
 import { FinancePage } from './pages/comp/FinancePage';
 import { AppContextProvider, useAppContext } from './context/AppContext';
-import { getMarketingDropdownIdentities, resolveRoleTitle } from './data/identityCatalog';
+import { resolveRoleTitle } from './data/identityCatalog';
 import { Loader2 } from 'lucide-react';
 import { LuxeDbLoader } from '@/components/comp/LuxeDbLoader';
 import { SimpleViewToggle } from '@/components/comp/SimpleViewToggle';
@@ -32,6 +32,7 @@ function Layout() {
     appReady,
     loading: profileLoading,
     loadingMetadata,
+    marketingReps,
   } = useAppContext();
 
   const [isIdentityOpen, setIsIdentityOpen] = useState(false);
@@ -60,8 +61,8 @@ function Layout() {
     if (loadingMetadata) return 'Loading comp catalog & periods…';
     return 'Loading…';
   }, [profileLoading, loadingMetadata]);
-  const repsList = getMarketingDropdownIdentities();
-  const activeRep = repsList.find(r => r.rep_id === activeRepId);
+  const repsList = marketingReps;
+  const activeRep = repsList.find((r) => r.rep_id === activeRepId);
   const activeRepName  = identityLoading ? '' : (activeRep?.rep_name ?? '');
   const activeRepLevel = identityLoading ? '' : (activeRep ? resolveRoleTitle(activeRep) : activeRoleTitle);
 

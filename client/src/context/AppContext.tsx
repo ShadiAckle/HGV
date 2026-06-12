@@ -111,6 +111,8 @@ interface AppContextType {
   changeActivePeriod: (periodId: string) => void;
   changeActiveScenario: (scenarioId: string) => void;
   refreshUserProfile: () => Promise<void>;
+  /** Marketing rep picker — from warehouse metadata when available. */
+  marketingReps: MetadataRep[];
   /** Field mode — simpler labels and AI phrasing for frontline reps. */
   plainEnglish: boolean;
   togglePlainEnglish: () => void;
@@ -389,6 +391,7 @@ export function AppContextProvider({ children }: { children: ReactNode }) {
         changeActivePeriod,
         changeActiveScenario,
         refreshUserProfile: fetchUserProfile,
+        marketingReps,
         plainEnglish,
         togglePlainEnglish,
       }}
