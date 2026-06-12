@@ -21,7 +21,7 @@ import { fetchCompMetadata } from './compMetadata.js';
 import { searchCompMentions } from './mentionsSearch.js';
 import { mountMcpHttp } from './mcp/mountMcpHttp.js';
 import { mountResponsesAgent } from './responsesAgent.js';
-import { rewriteCompCatalogSql } from '../shared/compCatalog.js';
+import { isProductionCompDataMode, rewriteCompCatalogSql } from '../shared/compCatalog.js';
 import { ensureCompExtensionsOnce, waitForBootstrap } from './compSchemaBootstrap.js';
 import {
   fetchActiveInterventions,
@@ -2021,8 +2021,10 @@ appkit.server.extend((app) => {
     }
   });
 
-  // Bootstrap in background — app SP may not have CREATE TABLE; tables must be provisioned via setup script.
-  void ensureCompExtensionsOnce(runSql);
+  // Demo bootstrap only — live VDI uses pre-provisioned edw_dev_hris.hgv_comp (views + DDL scripts).
+  if (!isProductionCompDataMode()) {
+    void ensureCompExtensionsOnce(runSql);
+  }
 });
 
 await appkit.server.start();

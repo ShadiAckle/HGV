@@ -20,26 +20,10 @@ type RunSql = (sql: string) => Promise<Record<string, unknown>[]>;
 
 let bootstrapPromise: Promise<void> | null = null;
 
-/** Writable tables only when live read path uses views for facts/dims. */
-async function ensureWritableCompTables(runSql: RunSql): Promise<void> {
-  await ensureManagerInterventionTable(runSql);
-  try {
-    await ensureAdminFinanceTables(runSql);
-  } catch (err) {
-    console.warn('admin finance DDL skipped:', err instanceof Error ? err.message : err);
-  }
-  try {
-    await ensureFinanceReferenceTables(runSql);
-  } catch (err) {
-    console.warn('finance reference DDL skipped:', err instanceof Error ? err.message : err);
-  }
-}
-
 /** Idempotent DDL + seed for marketing/benchmark tables and scenario tour lever. */
 export async function ensureCompExtensions(runSql: RunSql): Promise<void> {
   if (isProductionCompDataMode()) {
     console.info(describeCompDataMode());
-    await ensureWritableCompTables(runSql);
     return;
   }
 
