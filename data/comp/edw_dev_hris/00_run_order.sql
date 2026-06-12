@@ -17,7 +17,7 @@
 --   12_bootstrap_live_source_views.sql
 --   (run AFTER 00_bootstrap_all_ddl.sql, SKIP demo seeds below)
 --   15_apply_view_performance_governance.sql — bounded view definitions (supersedes 13 + 14)
---   16_materialize_marketing_core.sql — REQUIRED for VDI speed (Delta tables, run once)
+--   16_materialize_marketing_core.sql — REQUIRED for VDI speed (Delta tables, FY2025–FY2026)
 --
 -- Optional demo seeds (skip when using 12_bootstrap_live_source_views.sql):
 --   02_seed_synthetic_data.sql, 02a_seed_core_dims.sql, 02b_seed_sales_core.sql,

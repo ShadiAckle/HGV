@@ -1,15 +1,15 @@
 -- =============================================================================
 -- MATERIALIZE marketing core (REQUIRED for interactive speed on VDI)
 -- =============================================================================
--- Script 15 defines bounded VIEWS but every SELECT still re-scans Cognos/PwC.
--- This script runs ONCE (~5–15 min), writes Delta TABLES, then reads are seconds.
+-- DATA WINDOW: calendar FY2025 + FY2026 only (2025-01-01 .. 2026-12-31)
+-- Tuned for VDI: ~5–20 min total vs multi-hour full-history scans.
 --
 -- Prerequisite: 15_apply_view_performance_governance.sql (or full 12_bootstrap)
 -- Re-run safe: CREATE OR REPLACE TABLE overwrites marketing core tables.
--- Refresh: re-run this script after ETL loads (weekly/monthly).
+-- If a prior run stalled: Interrupt → Pull → re-run this script (or one block at a time).
 -- =============================================================================
 
--- Dependent views first (recreated at end)
+-- Dependent views + any partial tables from a stalled run
 DROP VIEW IF EXISTS edw_dev_hris.hgv_comp.fact_marketing_rep_metric;
 DROP VIEW IF EXISTS edw_dev_hris.hgv_comp.fact_marketing_chargeback;
 DROP VIEW IF EXISTS edw_dev_hris.hgv_comp.fact_marketing_arrival;
@@ -19,18 +19,25 @@ DROP VIEW IF EXISTS edw_dev_hris.hgv_comp.dim_marketing_rep;
 DROP VIEW IF EXISTS edw_dev_hris.hgv_comp.dim_period;
 DROP VIEW IF EXISTS edw_dev_hris.hgv_comp.dim_rep;
 
+DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.fact_marketing_rep_period;
+DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.fact_marketing_tour_payout;
+DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.dim_marketing_rep;
+DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.dim_period;
+DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.dim_rep;
+
 -- ---------------------------------------------------------------------------
--- 1) dim_marketing_rep — rep picker (filter detail BEFORE join)
+-- 1) dim_marketing_rep — rep picker (FY2025–FY2026 tours only)
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.dim_marketing_rep
 USING DELTA
-COMMENT 'Materialized marketing rep directory — refresh via 16_materialize_marketing_core.sql'
+COMMENT 'Materialized marketing reps (FY2025–FY2026) — refresh via 16_materialize_marketing_core.sql'
 AS
 WITH recent_detail AS (
-  SELECT DISTINCT d.tour_key_hash
+  SELECT d.tour_key_hash
   FROM edw_dev_cognos.cognos_fm.it_smt_detail d
   WHERE COALESCE(TO_DATE(d.tour_date), TO_DATE(d.transaction_date))
-    >= ADD_MONTHS(CURRENT_DATE(), -24)
+    BETWEEN DATE '2025-01-01' AND DATE '2026-12-31'
+  GROUP BY d.tour_key_hash
 )
 SELECT
   CAST(p.salesperson_1_employee_id AS STRING) AS rep_id,
@@ -50,12 +57,11 @@ WHERE p.salesperson_1_employee_id IS NOT NULL
 GROUP BY CAST(p.salesperson_1_employee_id AS STRING);
 
 -- ---------------------------------------------------------------------------
--- 2) fact_marketing_tour_payout — tour ledger (detail filtered first)
+-- 2) fact_marketing_tour_payout — tour ledger (FY2025–FY2026)
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.fact_marketing_tour_payout
 USING DELTA
-COMMENT 'Materialized marketing tour ledger — refresh via 16_materialize_marketing_core.sql'
-CLUSTER BY (rep_id, period_id)
+COMMENT 'Materialized marketing tour ledger (FY2025–FY2026) — refresh via 16_materialize_marketing_core.sql'
 AS
 WITH recent_detail AS (
   SELECT
@@ -71,7 +77,7 @@ WITH recent_detail AS (
     COALESCE(d.lead_prequal_fico_tier, 'U') AS abc_score
   FROM edw_dev_cognos.cognos_fm.it_smt_detail d
   WHERE COALESCE(TO_DATE(d.tour_date), TO_DATE(d.transaction_date))
-    >= ADD_MONTHS(CURRENT_DATE(), -24)
+    BETWEEN DATE '2025-01-01' AND DATE '2026-12-31'
 ),
 tour_spine AS (
   SELECT
@@ -149,8 +155,7 @@ FROM tour_spine t;
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.fact_marketing_rep_period
 USING DELTA
-COMMENT 'Materialized marketing rep-period KPIs — refresh via 16_materialize_marketing_core.sql'
-CLUSTER BY (rep_id, period_id)
+COMMENT 'Materialized marketing rep-period KPIs (FY2025–FY2026) — refresh via 16_materialize_marketing_core.sql'
 AS
 WITH tour_agg AS (
   SELECT
@@ -205,11 +210,11 @@ SELECT
 FROM tour_agg t;
 
 -- ---------------------------------------------------------------------------
--- 4) dim_period — small materialized calendar (≤24 quarters)
+-- 4) dim_period — FY2025–FY2026 quarters only (max 8)
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.dim_period
 USING DELTA
-COMMENT 'Materialized comp periods — refresh via 16_materialize_marketing_core.sql'
+COMMENT 'Materialized comp periods (FY2025–FY2026) — refresh via 16_materialize_marketing_core.sql'
 AS
 WITH commission_quarters AS (
   SELECT
@@ -238,7 +243,7 @@ WITH commission_quarters AS (
     ) AS period_end
   FROM edw_dev_hris.pwcmodels.commissions
   WHERE payDate IS NOT NULL
-    AND TO_DATE(payDate) >= ADD_MONTHS(CURRENT_DATE(), -60)
+    AND TO_DATE(payDate) BETWEEN DATE '2025-01-01' AND DATE '2026-12-31'
   GROUP BY 1, 2, 3, 4
 ),
 tour_quarters AS (
@@ -290,7 +295,7 @@ ranked AS (
     period_end,
     ROW_NUMBER() OVER (ORDER BY period_start DESC) AS rn
   FROM merged
-  WHERE period_start >= ADD_MONTHS(CURRENT_DATE(), -60)
+  WHERE period_start BETWEEN DATE '2025-01-01' AND DATE '2026-12-31'
 )
 SELECT
   period_id,
@@ -298,15 +303,14 @@ SELECT
   period_start,
   period_end,
   (rn = 1) AS is_current
-FROM ranked
-WHERE rn <= 24;
+FROM ranked;
 
 -- ---------------------------------------------------------------------------
--- 5) dim_rep — materialized union (marketing reps + field reps, bounded)
+-- 5) dim_rep — marketing reps + field reps (FY2025–FY2026 commissions)
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.dim_rep
 USING DELTA
-COMMENT 'Materialized rep directory — refresh via 16_materialize_marketing_core.sql'
+COMMENT 'Materialized rep directory (FY2025–FY2026) — refresh via 16_materialize_marketing_core.sql'
 AS
 SELECT
   rep_id,
@@ -337,7 +341,7 @@ SELECT
 FROM edw_dev_hris.pwcmodels.commissions c
 WHERE c.participant IS NOT NULL
   AND c.payDate IS NOT NULL
-  AND TO_DATE(c.payDate) >= ADD_MONTHS(CURRENT_DATE(), -60)
+  AND TO_DATE(c.payDate) BETWEEN DATE '2025-01-01' AND DATE '2026-12-31'
   AND c.participant NOT IN (SELECT rep_id FROM edw_dev_hris.hgv_comp.dim_marketing_rep)
 GROUP BY c.participant;
 
@@ -409,7 +413,6 @@ WHERE t.tour_status IN ('Scheduled', 'Booked', 'Confirmed')
 -- Smoke (should be seconds after materialization completes):
 -- ---------------------------------------------------------------------------
 -- SELECT COUNT(*) FROM edw_dev_hris.hgv_comp.dim_marketing_rep;
--- SELECT COUNT(*) FROM edw_dev_hris.hgv_comp.dim_period;
--- SELECT COUNT(*) FROM edw_dev_hris.hgv_comp.dim_rep;
--- SELECT COUNT(DISTINCT rep_id) FROM edw_dev_hris.hgv_comp.fact_marketing_rep_period;
--- SELECT * FROM edw_dev_hris.hgv_comp.fact_marketing_rep_period LIMIT 5;
+-- SELECT COUNT(*) FROM edw_dev_hris.hgv_comp.fact_marketing_tour_payout;
+-- SELECT table_name, table_type FROM edw_dev_hris.information_schema.tables
+--   WHERE table_schema = 'hgv_comp' AND table_name LIKE '%marketing%';
