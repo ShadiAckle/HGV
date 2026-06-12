@@ -51,8 +51,7 @@ if (Test-Path $envFile) {
   }
 }
 if (-not $hostUrl -or $hostUrl -match 'REPLACE-WITH') {
-  Write-Host 'Set DATABRICKS_HOST in .env first (copy from VDI browser address bar).' -ForegroundColor Red
-  exit 1
+  $hostUrl = 'https://adb-7405610243855520.0.azuredatabricks.net'
 }
 $profiles = databricks auth profiles 2>&1 | Out-String
 if ($profiles -notmatch [regex]::Escape($profile) -or $profiles -match "$profile.*\s+NO") {

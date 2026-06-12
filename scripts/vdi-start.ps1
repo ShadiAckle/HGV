@@ -6,6 +6,7 @@ $Root = if ($PSScriptRoot) { Split-Path -Parent $PSScriptRoot } else { Get-Locat
 Set-Location $Root
 
 $profile = 'hgv-edw'
+$defaultHost = 'https://adb-7405610243855520.0.azuredatabricks.net'
 
 function Load-DotEnv {
   param([string]$Path)
@@ -23,11 +24,8 @@ function Load-DotEnv {
 
 Load-DotEnv (Join-Path $Root '.env')
 
-$hostUrl = if ($env:DATABRICKS_HOST) { $env:DATABRICKS_HOST.Trim().TrimEnd('/') } else { '' }
-if (-not $hostUrl -or $hostUrl -match 'REPLACE-WITH') {
-  Write-Host 'Set DATABRICKS_HOST in .env to your workspace URL (copy from VDI browser address bar).' -ForegroundColor Red
-  exit 1
-}
+$hostUrl = if ($env:DATABRICKS_HOST) { $env:DATABRICKS_HOST.Trim().TrimEnd('/') } else { $defaultHost }
+if ($hostUrl -match 'REPLACE-WITH') { $hostUrl = $defaultHost }
 
 $appkit = Join-Path $Root 'node_modules\@databricks\appkit\package.json'
 if (-not (Test-Path $appkit)) {
