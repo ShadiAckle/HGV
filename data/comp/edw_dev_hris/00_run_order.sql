@@ -16,7 +16,8 @@
 -- Production live data (replaces synthetic fact/dim TABLES with VIEWS over Cognos ETL):
 --   12_bootstrap_live_source_views.sql
 --   (run AFTER 00_bootstrap_all_ddl.sql, SKIP demo seeds below)
---   15_apply_view_performance_governance.sql — ONE-SHOT patch (supersedes 13 + 14)
+--   15_apply_view_performance_governance.sql — bounded view definitions (supersedes 13 + 14)
+--   16_materialize_marketing_core.sql — REQUIRED for VDI speed (Delta tables, run once)
 --
 -- Optional demo seeds (skip when using 12_bootstrap_live_source_views.sql):
 --   02_seed_synthetic_data.sql, 02a_seed_core_dims.sql, 02b_seed_sales_core.sql,

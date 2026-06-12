@@ -2,6 +2,9 @@
 -- ONE-SHOT performance governance patch (supersedes 13 + 14)
 -- Catalog: edw_dev_hris.hgv_comp | Run in SQL Editor once
 -- TOUR_LOOKBACK=36mo | FIELD_LOOKBACK=60mo | dim_period capped at 24 quarters
+--
+-- WARNING: Views still re-scan Cognos on every query — too slow for the app.
+-- After this script, you MUST run 16_materialize_marketing_core.sql (one-time).
 -- =============================================================================
 
 CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp._src_tour_spine AS
