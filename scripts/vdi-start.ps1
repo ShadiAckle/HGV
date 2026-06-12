@@ -24,6 +24,14 @@ function Load-DotEnv {
 
 Load-DotEnv (Join-Path $Root '.env')
 
+$appkit = Join-Path $Root 'node_modules\@databricks\appkit\package.json'
+if (-not (Test-Path $appkit)) {
+  Write-Host 'Missing node_modules — run npm install first (from this folder):' -ForegroundColor Red
+  Write-Host "  cd $Root" -ForegroundColor Yellow
+  Write-Host '  npm install' -ForegroundColor Yellow
+  exit 1
+}
+
 if (-not (Get-Command databricks -ErrorAction SilentlyContinue)) {
   Write-Host 'Databricks CLI not found. Run: winget install Databricks.DatabricksCLI' -ForegroundColor Red
   exit 1
