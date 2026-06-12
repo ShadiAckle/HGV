@@ -1,7 +1,6 @@
 -- =============================================================================
+-- DEPRECATED — use 15_apply_view_performance_governance.sql instead
 -- Hotfix: stop dim_rep / marketing facts from scanning 55M+ commission rows
--- Run in SQL Editor on edw_dev_hris (after 12_bootstrap_live_source_views.sql).
--- Safe to re-run (CREATE OR REPLACE VIEW only).
 -- =============================================================================
 
 CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp._src_rep_directory AS

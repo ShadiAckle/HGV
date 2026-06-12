@@ -116,7 +116,7 @@ export async function buildMarketingRepWorkspace(
 
   if (!periodRows.length) {
     const latest = await runSql(`
-      SELECT period_id FROM workspace.hgv_comp.fact_marketing_rep_period
+      SELECT period_id FROM workspace.hgv_comp.fact_marketing_tour_payout
       WHERE rep_id = '${safeRep}'
       ORDER BY period_id DESC
       LIMIT 1

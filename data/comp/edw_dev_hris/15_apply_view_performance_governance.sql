@@ -1,49 +1,8 @@
 -- =============================================================================
--- HGV Compensation Hub — live source views (production read path)
--- Catalog: edw_dev_hris | Schema: hgv_comp
+-- ONE-SHOT performance governance patch (supersedes 13 + 14)
+-- Catalog: edw_dev_hris.hgv_comp | Run in SQL Editor once
+-- TOUR_LOOKBACK=36mo | FIELD_LOOKBACK=60mo | dim_period capped at 24 quarters
 -- =============================================================================
--- Replaces synthetic Delta TABLES with VIEWS over governed ETL sources:
---   edw_dev_cognos.cognos_fm.it_smt_detail
---   edw_dev_cognos.cognos_fm.it_smt_marketing
---   edw_dev_cognos.cognos_fm.it_smt_personnel
---   edw_dev_cognos.cognos_fm.it_smt_contract
---   edw_dev_cognos.cognos_fm.it_uni_contract
---   edw_dev_cognos.cognos_fm.it_uni_lead
---   edw_dev_hris.pwcmodels.commissions
---
--- Prerequisites:
---   1. Run 00_bootstrap_all_ddl.sql once (creates schema + writable tables).
---   2. SKIP demo seed scripts (02*, 04*, 05a*, 06a*, 07a*, 09a*, 10a*).
---   3. Principal needs USE CATALOG on edw_dev_hris AND edw_dev_cognos.
---   4. Optional reference seeds still recommended:
---        06a_seed_marketing_benchmark.sql (industry_comp_benchmark)
---        10a_seed_plan_assessment.sql (plan_assessment_*)
---        07a_seed_regional_bonus.sql (regional bonus tables)
---        05b seed / dim_finance_period if finance agent is in scope
---
--- Writable objects (NOT replaced — app INSERT/UPDATE still uses Delta tables):
---   scenario_run, scenario_result, scenario_payout_series
---   semantic_definitions, fact_comp_admin_log, fact_manager_intervention
---   industry_comp_benchmark, plan_assessment_*, fact_regional_bonus_*
---   dim_finance_period, dim_plan_component, fact_call_center_credit
---
--- After running: set COMP_DATA_MODE=production (or disable bootstrap seeds) on the app.
---
--- PERFORMANCE GOVERNANCE (live views over billion-row Cognos / PwC tables):
---   TOUR_LOOKBACK_MONTHS   = 36  — applied on it_smt_detail in _src_tour_spine
---   FIELD_LOOKBACK_MONTHS  = 60  — applied on pwcmodels.commissions + uni_contract dates
---   PERIOD_PICKER_LIMIT    = 24  — dim_period caps quarters returned to the app
--- Rules: no DISTINCT on fact tables; use GROUP BY on grain keys; never JOIN dim_rep
---        inside marketing rollups; metadata uses dim_marketing_rep (not rep_period).
--- One-shot patch for deployed envs: 15_apply_view_performance_governance.sql
--- =============================================================================
-
-CREATE SCHEMA IF NOT EXISTS edw_dev_hris.hgv_comp
-COMMENT 'HGV comp semantic layer — live views over Cognos / PwC ETL';
-
--- ---------------------------------------------------------------------------
--- Internal staging views (join spine + helpers)
--- ---------------------------------------------------------------------------
 
 CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp._src_tour_spine AS
 SELECT
@@ -90,6 +49,7 @@ WHERE COALESCE(TO_DATE(d.tour_date), TO_DATE(d.transaction_date))
   >= ADD_MONTHS(CURRENT_DATE(), -36);
 
 -- Rep directory: GROUP BY rep keys (never DISTINCT-scan full commissions at tour/payment grain).
+
 CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp._src_rep_directory AS
 SELECT
   CAST(p.salesperson_1_employee_id AS STRING) AS rep_id,
@@ -134,6 +94,7 @@ WHERE c.participant IS NOT NULL
 GROUP BY c.participant;
 
 -- Period calendar: aggregate to quarter grain (avoid DISTINCT over full commissions history).
+
 CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp._src_period_calendar AS
 WITH commission_quarters AS (
   SELECT
@@ -300,93 +261,6 @@ SELECT
 FROM ranked
 WHERE rn <= 24;
 
-CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp.dim_plan_version AS
-SELECT
-  'PLAN-FT-2026' AS plan_version_id,
-  'HGV Field & Marketing Comp FY2026' AS plan_name,
-  DATE '2026-01-01' AS effective_start,
-  CAST(NULL AS DATE) AS effective_end;
-
-CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp.dim_product_line AS
-SELECT DISTINCT
-  CASE WHEN COALESCE(CAST(uc.project_ffs AS INT), 0) = 1 THEN 'PROD-FFS' ELSE 'PROD-NONFFS' END AS product_line_id,
-  CASE WHEN COALESCE(CAST(uc.project_ffs AS INT), 0) = 1 THEN 'Full Fee Service (FFS)' ELSE 'Non-FFS / Mixed' END AS product_line_name,
-  COALESCE(CAST(uc.project_ffs AS INT), 0) = 1 AS is_ffs
-FROM edw_dev_cognos.cognos_fm.it_uni_contract uc
-WHERE uc.project_ffs IS NOT NULL
-
-UNION ALL
-
-SELECT 'PROD-FFS', 'Full Fee Service (FFS)', TRUE
-UNION ALL
-SELECT 'PROD-NONFFS', 'Non-FFS / Mixed', FALSE;
-
-CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp.dim_location AS
-SELECT DISTINCT
-  CONCAT('LOC-', office_code) AS location_id,
-  COALESCE(NULLIF(TRIM(office_description), ''), CONCAT('Office ', office_code)) AS location_name,
-  'sales_center' AS location_type,
-  office_region AS market,
-  COALESCE(NULLIF(TRIM(office_brand), ''), 'HGV') AS brand,
-  office_code AS desk_label
-FROM edw_dev_cognos.cognos_fm.it_smt_marketing
-WHERE office_code IS NOT NULL;
-
-CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp.dim_household AS
-SELECT DISTINCT
-  CONCAT('HH-', l.enterprise_lead_id) AS household_id,
-  CASE
-    WHEN COALESCE(CAST(l.lead_num_of_dependants AS INT), 0) <= 0 THEN '1-2'
-    WHEN COALESCE(CAST(l.lead_num_of_dependants AS INT), 0) <= 2 THEN '3-4'
-    ELSE '5+'
-  END AS hh_size_band,
-  'Not disclosed' AS income_band,
-  COALESCE(NULLIF(TRIM(l.lead_city), ''), 'Unknown') AS home_msa,
-  'uni_lead' AS enrichment_source,
-  TO_DATE(l.date_lead_created) AS enrichment_as_of
-FROM edw_dev_cognos.cognos_fm.it_uni_lead l
-WHERE l.enterprise_lead_id IS NOT NULL
-  AND TO_DATE(l.date_lead_created) >= ADD_MONTHS(CURRENT_DATE(), -60);
-
-CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp.dim_guest AS
-SELECT DISTINCT
-  CAST(l.enterprise_lead_id AS STRING) AS guest_id,
-  CONCAT(
-    COALESCE(NULLIF(TRIM(l.lead_first_name_1), ''), 'Guest'),
-    ' ',
-    COALESCE(NULLIF(TRIM(l.lead_last_name_1), ''), CAST(l.enterprise_lead_id AS STRING))
-  ) AS guest_name,
-  CAST(NULL AS STRING) AS email,
-  CAST(NULL AS STRING) AS phone_token,
-  CASE
-    WHEN COALESCE(CAST(sc.number_of_developed_contracts_owned AS INT), 0)
-       + COALESCE(CAST(sc.number_of_managed_contracts_owned AS INT), 0) > 0 THEN 'Owner'
-    ELSE 'Prospect'
-  END AS guest_type,
-  COALESCE(CAST(sc.number_of_developed_contracts_owned AS INT), 0)
-    + COALESCE(CAST(sc.number_of_managed_contracts_owned AS INT), 0) > 0 AS owner_flag,
-  CONCAT('HH-', l.enterprise_lead_id) AS household_id,
-  COALESCE(NULLIF(TRIM(l.lead_hhn_tier_code), ''), 'UNK') AS qualification_code,
-  TO_DATE(l.date_lead_created) AS tour_booked_date
-FROM edw_dev_cognos.cognos_fm.it_uni_lead l
-LEFT JOIN edw_dev_cognos.cognos_fm.it_smt_contract sc
-  ON CAST(sc.enterprise_lead_id AS STRING) = CAST(l.enterprise_lead_id AS STRING)
-WHERE l.enterprise_lead_id IS NOT NULL
-  AND TO_DATE(l.date_lead_created) >= ADD_MONTHS(CURRENT_DATE(), -60);
-
-CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp.bridge_tour_guest AS
-SELECT DISTINCT
-  CAST(t.tour_id AS STRING) AS tour_id,
-  CAST(t.enterprise_lead_id AS STRING) AS guest_id,
-  TRUE AS is_primary
-FROM edw_dev_hris.hgv_comp._src_tour_spine t
-WHERE t.tour_id IS NOT NULL
-  AND t.enterprise_lead_id IS NOT NULL;
-
--- ---------------------------------------------------------------------------
--- Field sales facts (pwcmodels.commissions + uni_contract)
--- ---------------------------------------------------------------------------
-
 CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp.fact_payout AS
 SELECT
   c.participant AS rep_id,
@@ -513,101 +387,6 @@ FULL OUTER JOIN field_commission f
   ON r.rep_id = f.rep_id
  AND r.period_id = f.period_id
 WHERE COALESCE(r.rep_id, f.rep_id) IS NOT NULL;
-
-CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp.fact_tour_quality AS
-SELECT
-  CAST(t.tour_id AS STRING) AS tour_id,
-  COALESCE(CAST(t.salesperson_1_employee_id AS STRING), 'UNASSIGNED') AS rep_id,
-  CONCAT(
-    CAST(YEAR(t.tour_date) AS STRING),
-    '-Q',
-    CAST(CAST(CEIL(MONTH(t.tour_date) / 3.0) AS INT) AS STRING)
-  ) AS period_id,
-  t.lead_source,
-  t.abc_score,
-  t.package_type,
-  t.showed_flag,
-  (t.gross_transactions > 0 AND t.net_volume > 0) AS closed_flag,
-  t.contract_status AS contract_status,
-  (t.net_volume < 0 OR COALESCE(t.net_transactions, 0) < 0) AS rescission_flag,
-  CAST(t.net_volume AS DECIMAL(14, 2)) AS net_sales_volume,
-  CAST(
-    CASE
-      WHEN t.gross_transactions > 0 THEN t.net_volume / t.gross_transactions
-      ELSE 0
-    END AS DECIMAL(10, 2)
-  ) AS vpg,
-  CAST(t.net_volume * 0.12 AS DECIMAL(14, 2)) AS ebitda_estimate
-FROM edw_dev_hris.hgv_comp._src_tour_spine t
-WHERE t.tour_id IS NOT NULL
-  AND t.tour_date IS NOT NULL;
-
-CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp.fact_rep_product_mix AS
-WITH rep_period_mix AS (
-  SELECT
-    dc.rep_id,
-    dc.period_id,
-    dc.product_line_id,
-    SUM(ABS(dc.credit_amount)) AS abs_credit
-  FROM edw_dev_hris.hgv_comp.fact_deal_credit dc
-  GROUP BY dc.rep_id, dc.period_id, dc.product_line_id
-),
-totals AS (
-  SELECT rep_id, period_id, SUM(abs_credit) AS total_credit
-  FROM rep_period_mix
-  GROUP BY rep_id, period_id
-)
-SELECT
-  m.rep_id,
-  m.period_id,
-  m.product_line_id,
-  CAST(
-    CASE
-      WHEN t.total_credit = 0 THEN 0
-      ELSE (m.abs_credit / t.total_credit) * 100
-    END AS DECIMAL(6, 2)
-  ) AS mix_pct
-FROM rep_period_mix m
-JOIN totals t
-  ON m.rep_id = t.rep_id
- AND m.period_id = t.period_id;
-
-CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp.fact_team_snapshot AS
-WITH rep_period AS (
-  SELECT
-    r.team_id,
-    qa.period_id,
-    qa.rep_id,
-    qa.attainment_pct,
-    qa.attainment_pct >= 100 AS is_top,
-    qa.attainment_pct < 80 AS is_at_risk
-  FROM edw_dev_hris.hgv_comp.fact_quota_attainment qa
-  JOIN edw_dev_hris.hgv_comp.dim_rep r
-    ON r.rep_id = qa.rep_id
-),
-ffs_mix AS (
-  SELECT
-    r.team_id,
-    pm.period_id,
-    AVG(CASE WHEN pm.product_line_id = 'PROD-FFS' THEN pm.mix_pct ELSE 0 END) AS ffs_sales_pct
-  FROM edw_dev_hris.hgv_comp.fact_rep_product_mix pm
-  JOIN edw_dev_hris.hgv_comp.dim_rep r
-    ON r.rep_id = pm.rep_id
-  GROUP BY r.team_id, pm.period_id
-)
-SELECT
-  rp.team_id,
-  rp.period_id,
-  CAST(AVG(rp.attainment_pct) AS DECIMAL(6, 2)) AS team_attainment_pct,
-  CAST(SUM(CASE WHEN rp.is_top THEN 1 ELSE 0 END) AS INT) AS top_performer_count,
-  CAST(SUM(CASE WHEN rp.is_at_risk THEN 1 ELSE 0 END) AS INT) AS at_risk_count,
-  CAST(COALESCE(MAX(f.ffs_sales_pct), 0) AS DECIMAL(6, 2)) AS ffs_sales_pct,
-  CAST(20.00 AS DECIMAL(6, 2)) AS ffs_target_pct
-FROM rep_period rp
-LEFT JOIN ffs_mix f
-  ON f.team_id = rp.team_id
- AND f.period_id = rp.period_id
-GROUP BY rp.team_id, rp.period_id;
 
 CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp.fact_plan_eligibility AS
 SELECT
@@ -780,67 +559,6 @@ SELECT
   CAST(0 AS DECIMAL(6, 2)) AS tcc_gap_vs_market_pct
 FROM tour_agg t;
 
-CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp.fact_marketing_rep_metric AS
-WITH base AS (
-  SELECT
-    rep_id,
-    period_id,
-    qualified_tours,
-    tours_shown,
-    show_rate_pct,
-    penetration_pct,
-    total_payout
-  FROM edw_dev_hris.hgv_comp.fact_marketing_rep_period
-)
-SELECT rep_id, period_id, 'Qualified Tours' AS metric_name, CAST(40.00 AS DECIMAL(6, 2)) AS weight_pct,
-       CAST(total_payout * 0.4 AS DECIMAL(14, 2)) AS earnings,
-       CAST(penetration_pct AS DECIMAL(6, 2)) AS attainment_pct,
-       'Plan target' AS target_label,
-       CAST(GREATEST(0, (25 - penetration_pct) * 50) AS DECIMAL(14, 2)) AS opportunity_usd
-FROM base
-UNION ALL
-SELECT rep_id, period_id, 'Show Rate', CAST(35.00 AS DECIMAL(6, 2)),
-       CAST(total_payout * 0.35 AS DECIMAL(14, 2)),
-       show_rate_pct, '85% benchmark',
-       CAST(GREATEST(0, (85 - show_rate_pct) * 25) AS DECIMAL(14, 2))
-FROM base
-UNION ALL
-SELECT rep_id, period_id, 'Qualified Tour Pay', CAST(25.00 AS DECIMAL(6, 2)),
-       CAST(total_payout * 0.25 AS DECIMAL(14, 2)),
-       CAST(CASE WHEN qualified_tours = 0 THEN 0 ELSE LEAST(100, qualified_tours * 5) END AS DECIMAL(6, 2)),
-       'Tour count tier',
-       CAST(GREATEST(0, (10 - qualified_tours) * 100) AS DECIMAL(14, 2))
-FROM base;
-
-CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp.fact_marketing_chargeback AS
-SELECT
-  CONCAT('MKT-CB-', t.tour_id) AS chargeback_id,
-  t.rep_id,
-  t.period_id,
-  t.guest_name,
-  t.tour_id,
-  CAST(NULL AS STRING) AS premium_gift,
-  CAST(ABS(LEAST(t.payout, 0)) AS DECIMAL(14, 2)) AS chargeback_amount,
-  'Negative tour payout / reversal' AS notes
-FROM edw_dev_hris.hgv_comp.fact_marketing_tour_payout t
-WHERE t.payout < 0;
-
-CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp.fact_marketing_arrival AS
-SELECT
-  CONCAT('ARR-', t.tour_id) AS arrival_id,
-  t.rep_id,
-  t.period_id,
-  t.guest_name,
-  t.guest_type,
-  COALESCE(CAST(t.tour_booked_date AS STRING), CAST(t.arrival_date AS STRING)) AS arrival_datetime,
-  COALESCE(t.code, 'Desk') AS desk,
-  CAST(CASE WHEN t.guest_type = 'Qualified' THEN 150 ELSE 50 END AS DECIMAL(14, 2)) AS potential_qualified_tour,
-  CAST(t.fps_potential AS DECIMAL(14, 2)) AS potential_fps_payout,
-  CAST(t.payout + t.fps_potential AS DECIMAL(14, 2)) AS projected_total_payout
-FROM edw_dev_hris.hgv_comp.fact_marketing_tour_payout t
-WHERE t.tour_status IN ('Scheduled', 'Booked', 'Confirmed')
-   OR t.arrival_date >= CURRENT_DATE();
-
 CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp.fact_rep_market_position AS
 SELECT
   qa.rep_id,
@@ -861,67 +579,8 @@ LEFT JOIN edw_dev_hris.hgv_comp._src_rep_directory fr
 -- ---------------------------------------------------------------------------
 -- Guest registry facts
 -- ---------------------------------------------------------------------------
-
-CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp.fact_guest_ownership AS
-SELECT
-  CONCAT('OWN-', CAST(uc.contr_num AS STRING)) AS ownership_id,
-  CAST(uc.enterprise_lead_id AS STRING) AS guest_id,
-  COALESCE(NULLIF(TRIM(uc.project_desc), ''), 'HGV Property') AS property_name,
-  CONCAT('LOC-', COALESCE(uc.office_code, 'UNK')) AS location_id,
-  COALESCE(NULLIF(TRIM(uc.contract_status_desc), ''), 'UNKNOWN') AS contract_status,
-  CAST(COALESCE(uc.net_points, 0) AS INT) AS points_balance,
-  'HGV' AS brand
-FROM edw_dev_cognos.cognos_fm.it_uni_contract uc
-WHERE uc.enterprise_lead_id IS NOT NULL
-  AND CAST(uc.contr_num AS BIGINT) > 0
-
-UNION ALL
-
-SELECT
-  CONCAT('OWN-SUM-', CAST(sc.enterprise_lead_id AS STRING)) AS ownership_id,
-  CAST(sc.enterprise_lead_id AS STRING) AS guest_id,
-  'Portfolio Summary' AS property_name,
-  CAST(NULL AS STRING) AS location_id,
-  'ACTIVE' AS contract_status,
-  CAST(COALESCE(sc.total_net_points, 0) AS INT) AS points_balance,
-  'HGV' AS brand
-FROM edw_dev_cognos.cognos_fm.it_smt_contract sc
-WHERE sc.enterprise_lead_id IS NOT NULL;
-
-CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp.fact_guest_tour_history AS
-SELECT
-  CONCAT('HIST-', t.tour_id) AS history_id,
-  CAST(t.enterprise_lead_id AS STRING) AS guest_id,
-  CAST(t.tour_id AS STRING) AS tour_id,
-  CAST(t.salesperson_1_employee_id AS STRING) AS rep_id,
-  t.tour_date,
-  COALESCE(t.tour_status_desc, 'Completed') AS tour_status,
-  CONCAT(
-    CASE WHEN t.qualified_flag THEN 'Qualified' WHEN t.showed_flag THEN 'Showed' ELSE 'No-show' END,
-    ' | Net vol ',
-    CAST(t.net_volume AS STRING)
-  ) AS outcome_summary
-FROM edw_dev_hris.hgv_comp._src_tour_spine t
-WHERE t.tour_id IS NOT NULL
-  AND t.enterprise_lead_id IS NOT NULL
-  AND t.tour_date IS NOT NULL;
-
-CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp.fact_guest_rental_stay AS
-SELECT
-  CAST(NULL AS STRING) AS stay_id,
-  CAST(NULL AS STRING) AS guest_id,
-  CAST(NULL AS STRING) AS location_id,
-  CAST(NULL AS STRING) AS stay_type,
-  CAST(NULL AS DATE) AS check_in,
-  CAST(NULL AS DATE) AS check_out,
-  CAST(NULL AS INT) AS nights
-WHERE 1 = 0;
-
--- ---------------------------------------------------------------------------
--- Smoke checks (each should complete in seconds on serverless warehouse)
--- ---------------------------------------------------------------------------
+-- Smoke (seconds each):
 -- SELECT COUNT(*) AS dim_rep FROM edw_dev_hris.hgv_comp.dim_rep;
 -- SELECT COUNT(*) AS dim_marketing_rep FROM edw_dev_hris.hgv_comp.dim_marketing_rep;
 -- SELECT COUNT(DISTINCT rep_id) AS mkt_rep_period FROM edw_dev_hris.hgv_comp.fact_marketing_rep_period;
 -- SELECT COUNT(*) AS dim_period FROM edw_dev_hris.hgv_comp.dim_period;
--- SELECT COUNT(*) AS tour_payout FROM edw_dev_hris.hgv_comp.fact_marketing_tour_payout;

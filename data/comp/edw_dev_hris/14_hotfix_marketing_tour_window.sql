@@ -1,6 +1,6 @@
 -- =============================================================================
+-- DEPRECATED — use 15_apply_view_performance_governance.sql instead
 -- Hotfix: fact_marketing_rep_period hangs — full tour history aggregation
--- Run after 13_hotfix_view_performance.sql
 -- =============================================================================
 -- Root cause: fact_marketing_tour_payout scanned ALL it_smt_detail tours (no date
 -- window). COUNT on fact_marketing_rep_period forces a full rep×period rollup.
