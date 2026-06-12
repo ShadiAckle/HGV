@@ -14,13 +14,37 @@ import { ensureFinanceReferenceTables } from './financeReferenceSeed.js';
 import { ensureMarketingTeamRoster, refreshMarketingMarketPositions, ensureSalesDiversitySeed, dedupeRepMarketPositions } from './marketingTeamSeed.js';
 import { ensureQuestionCatalogSeed } from './compCatalogSeed.js';
 import { ensureGuestRegistrySeed, ensureGuestRegistryTables } from './guestRegistrySeed.js';
+import { isProductionCompDataMode } from '../shared/compCatalog.js';
 
 type RunSql = (sql: string) => Promise<Record<string, unknown>[]>;
 
 let bootstrapPromise: Promise<void> | null = null;
 
+/** Writable tables only when live read path uses views for facts/dims. */
+async function ensureWritableCompTables(runSql: RunSql): Promise<void> {
+  await ensureManagerInterventionTable(runSql);
+  try {
+    await ensureAdminFinanceTables(runSql);
+  } catch (err) {
+    console.warn('admin finance DDL skipped:', err instanceof Error ? err.message : err);
+  }
+  try {
+    await ensureFinanceReferenceTables(runSql);
+  } catch (err) {
+    console.warn('finance reference DDL skipped:', err instanceof Error ? err.message : err);
+  }
+}
+
 /** Idempotent DDL + seed for marketing/benchmark tables and scenario tour lever. */
 export async function ensureCompExtensions(runSql: RunSql): Promise<void> {
+  if (isProductionCompDataMode()) {
+    console.info(
+      'COMP_DATA_MODE=production — skipping demo bootstrap (live hgv_comp views; reads only).',
+    );
+    await ensureWritableCompTables(runSql);
+    return;
+  }
+
   const ddlStatements = [
     `CREATE SCHEMA IF NOT EXISTS workspace.hgv_comp`,
 

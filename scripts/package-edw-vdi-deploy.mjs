@@ -62,18 +62,31 @@ for (const name of readdirSync(queriesSrc)) {
 
 // app.yaml with edw catalog env
 const appYaml = readFileSync(join(root, 'app.yaml'), 'utf8');
-const extraEnv = `  - name: COMP_CATALOG
+let patchedYaml = appYaml;
+if (!patchedYaml.includes('COMP_CATALOG')) {
+  patchedYaml = patchedYaml.replace(
+    /(  - name: DATABRICKS_SERVING_ENDPOINT_NAME\n    valueFrom: serving-endpoint\n)/,
+    `$1  - name: COMP_CATALOG
     value: ${COMP_CATALOG}
   - name: COMP_SCHEMA
     value: ${COMP_SCHEMA}
-`;
-const patchedYaml = appYaml.includes('COMP_CATALOG')
-  ? appYaml
-  : appYaml.replace(
-      /(  - name: DATABRICKS_SERVING_ENDPOINT_NAME\n    valueFrom: serving-endpoint\n)/,
-      `$1${extraEnv}`,
-    );
+`,
+  );
+}
+if (!patchedYaml.includes('COMP_DATA_MODE')) {
+  patchedYaml = patchedYaml.replace(
+    /(  - name: COMP_SCHEMA\n    value: .*?\n)/,
+    `$1  - name: COMP_DATA_MODE
+    value: production
+`,
+  );
+}
 writeFileSync(join(staging, 'app.yaml'), patchedYaml);
+
+const vdiEnv = join(root, 'scripts', 'vdi-edw.env.example');
+if (existsSync(vdiEnv)) {
+  writeFileSync(join(staging, '.env.example'), readFileSync(vdiEnv, 'utf8'));
+}
 
 writeFileSync(
   join(staging, 'DEPLOY_README.txt'),

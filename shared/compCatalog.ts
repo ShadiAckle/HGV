@@ -18,3 +18,11 @@ export function rewriteCompCatalogSql(sql: string): string {
   if (target === 'workspace.hgv_comp') return sql;
   return sql.split('workspace.hgv_comp').join(target);
 }
+
+/** Live Cognos/PwC views — skip demo DDL/seeds that INSERT into hgv_comp facts/dims. */
+export function isProductionCompDataMode(): boolean {
+  const mode = (process.env.COMP_DATA_MODE ?? '').trim().toLowerCase();
+  if (mode === 'production' || mode === 'live') return true;
+  const skip = (process.env.COMP_SKIP_BOOTSTRAP ?? '').trim().toLowerCase();
+  return skip === '1' || skip === 'true' || skip === 'yes';
+}
