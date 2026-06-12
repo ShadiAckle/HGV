@@ -42,6 +42,11 @@ function copyTree(src, dest) {
 copyTree('dist', 'dist');
 copyTree('client/dist', 'client/dist');
 copyTree('package.json', 'package.json');
+mkdirSync(join(staging, 'scripts'), { recursive: true });
+for (const name of ['vdi-start.ps1', 'vdi-edw.env.example']) {
+  const src = join(root, 'scripts', name);
+  if (existsSync(src)) cpSync(src, join(staging, 'scripts', name));
+}
 if (existsSync(join(root, 'package-lock.json'))) {
   copyTree('package-lock.json', 'package-lock.json');
 }
