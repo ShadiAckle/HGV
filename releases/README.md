@@ -4,9 +4,13 @@ Download `hgv-comp-app-edw_dev_hris.zip` from this folder (Databricks Git pull o
 
 ## Local run on VDI (recommended for demo)
 
-1. Unzip to e.g. `C:\Users\jbarso\Downloads\hgv-comp-app-edw_dev_hris`
-2. Copy `scripts/vdi-edw.env.example` → `.env` and set `DATABRICKS_WAREHOUSE_ID` from `databricks warehouses list`
-3. `npm install` → `npm start` → open `http://127.0.0.1:8000`
+1. Unzip to **`C:\Users\jbarso\Downloads\hgv-comp`** (avoid OneDrive — it breaks `node_modules`)
+2. Edit `.env` — set `DATABRICKS_WAREHOUSE_ID=9e9c06ad1c397404` (Serverless Starter)
+3. `npm install` (wait until it finishes with no errors)
+4. `npm start` → open `http://127.0.0.1:8000`
+
+If `npm start` fails, run directly:
+`node --env-file-if-exists=./.env ./dist/server.js`
 
 ## Databricks App deploy
 
