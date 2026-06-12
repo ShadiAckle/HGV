@@ -85,7 +85,10 @@ writeFileSync(join(staging, 'app.yaml'), patchedYaml);
 
 const vdiEnv = join(root, 'scripts', 'vdi-edw.env.example');
 if (existsSync(vdiEnv)) {
-  writeFileSync(join(staging, '.env.example'), readFileSync(vdiEnv, 'utf8'));
+  const envText = readFileSync(vdiEnv, 'utf8');
+  writeFileSync(join(staging, '.env.example'), envText);
+  // Pre-baked .env so npm start skips demo bootstrap without a manual copy step.
+  writeFileSync(join(staging, '.env'), envText);
 }
 
 writeFileSync(
@@ -101,9 +104,14 @@ writeFileSync(
    - SQL warehouse (same one used for bootstrap DDL)
    - Model serving endpoint (e.g. databricks-claude-sonnet-4-6)
 
-4. Environment variables (also in app.yaml):
+4. Environment variables (also in app.yaml and .env for local npm start):
    COMP_CATALOG=${COMP_CATALOG}
    COMP_SCHEMA=${COMP_SCHEMA}
+   COMP_DATA_MODE=production
+
+   Local VDI demo: unzip → npm install → npm start → http://127.0.0.1:8000
+   On startup you should see: "live data — skipping demo bootstrap"
+   (No "Seeding marketing team roster" lines.)
 
 5. After first deploy, note the app service principal client id, then run:
    data/comp/edw_dev_hris/08_grant_app_permissions.sql

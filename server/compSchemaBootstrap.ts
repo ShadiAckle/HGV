@@ -14,7 +14,7 @@ import { ensureFinanceReferenceTables } from './financeReferenceSeed.js';
 import { ensureMarketingTeamRoster, refreshMarketingMarketPositions, ensureSalesDiversitySeed, dedupeRepMarketPositions } from './marketingTeamSeed.js';
 import { ensureQuestionCatalogSeed } from './compCatalogSeed.js';
 import { ensureGuestRegistrySeed, ensureGuestRegistryTables } from './guestRegistrySeed.js';
-import { isProductionCompDataMode } from '../shared/compCatalog.js';
+import { describeCompDataMode, isProductionCompDataMode } from '../shared/compCatalog.js';
 
 type RunSql = (sql: string) => Promise<Record<string, unknown>[]>;
 
@@ -38,12 +38,12 @@ async function ensureWritableCompTables(runSql: RunSql): Promise<void> {
 /** Idempotent DDL + seed for marketing/benchmark tables and scenario tour lever. */
 export async function ensureCompExtensions(runSql: RunSql): Promise<void> {
   if (isProductionCompDataMode()) {
-    console.info(
-      'COMP_DATA_MODE=production — skipping demo bootstrap (live hgv_comp views; reads only).',
-    );
+    console.info(describeCompDataMode());
     await ensureWritableCompTables(runSql);
     return;
   }
+
+  console.info(describeCompDataMode());
 
   const ddlStatements = [
     `CREATE SCHEMA IF NOT EXISTS workspace.hgv_comp`,

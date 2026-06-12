@@ -22,7 +22,25 @@ export function rewriteCompCatalogSql(sql: string): string {
 /** Live Cognos/PwC views — skip demo DDL/seeds that INSERT into hgv_comp facts/dims. */
 export function isProductionCompDataMode(): boolean {
   const mode = (process.env.COMP_DATA_MODE ?? '').trim().toLowerCase();
+  if (mode === 'demo' || mode === 'synthetic') return false;
   if (mode === 'production' || mode === 'live') return true;
   const skip = (process.env.COMP_SKIP_BOOTSTRAP ?? '').trim().toLowerCase();
-  return skip === '1' || skip === 'true' || skip === 'yes';
+  if (skip === '1' || skip === 'true' || skip === 'yes') return true;
+  // VDI deploy always sets COMP_CATALOG=edw_dev_hris — views are read-only; never demo-seed.
+  return getCompCatalog().toLowerCase() === 'edw_dev_hris';
+}
+
+/** Startup log line — explains why bootstrap runs or is skipped. */
+export function describeCompDataMode(): string {
+  const catalog = getCompCatalog();
+  const schema = getCompSchema();
+  const mode = (process.env.COMP_DATA_MODE ?? '').trim();
+  if (!isProductionCompDataMode()) {
+    return `demo bootstrap enabled (COMP_DATA_MODE=${mode || '(unset)'}, catalog=${catalog}.${schema})`;
+  }
+  if (mode) return `live data — skipping demo bootstrap (COMP_DATA_MODE=${mode}, ${catalog}.${schema})`;
+  if (catalog.toLowerCase() === 'edw_dev_hris') {
+    return `live data — skipping demo bootstrap (auto: catalog=${catalog}.${schema})`;
+  }
+  return `live data — skipping demo bootstrap (${catalog}.${schema})`;
 }
