@@ -61,6 +61,22 @@ FROM (
 
 
 -- -----------------------------------------------------------------------------
+-- B4) Marketing-led spine (script 16 step 1 — prefer this path)
+--     VDI baseline: txn_rows_2026 ~1,232,974 | tour_keys_2026 ~163,233
+-- -----------------------------------------------------------------------------
+
+SELECT COUNT(*) AS marketing_rows_2026
+FROM edw_dev_cognos.cognos_fm.it_smt_marketing m
+WHERE m.tour_booked_date IS NOT NULL
+  AND TO_DATE(m.tour_booked_date) BETWEEN DATE '2026-01-01' AND DATE '2026-12-31';
+
+SELECT COUNT(DISTINCT m.tour_key_hash) AS tour_keys_2026
+FROM edw_dev_cognos.cognos_fm.it_smt_marketing m
+WHERE m.tour_booked_date IS NOT NULL
+  AND TO_DATE(m.tour_booked_date) BETWEEN DATE '2026-01-01' AND DATE '2026-12-31';
+
+
+-- -----------------------------------------------------------------------------
 -- C) Narrower window — 2026-Q2 only (fallback if B1 is still huge)
 -- -----------------------------------------------------------------------------
 
