@@ -207,10 +207,10 @@ WITH tour_agg AS (
     COUNT(*) AS tours_total,
     SUM(CASE WHEN tp.guest_type = 'Qualified' THEN 1 ELSE 0 END) AS qualified_tours,
     SUM(CASE WHEN tp.guest_type IN ('Qualified', 'Showed') THEN 1 ELSE 0 END) AS tours_shown,
-    SUM(tp.payout) AS tour_payout,
-    SUM(CASE WHEN tp.payout < 0 THEN ABS(tp.payout) ELSE 0 END) AS chargebacks,
-    SUM(CASE WHEN tp.guest_type = 'Qualified' THEN tp.payout ELSE 0 END) AS qualified_tour_pay,
-    SUM(CASE WHEN tp.guest_type = 'Courtesy' THEN tp.payout ELSE 0 END) AS courtesy_tour_pay
+    CAST(SUM(tp.payout) AS DECIMAL(18, 2)) AS tour_payout,
+    CAST(SUM(CASE WHEN tp.payout < 0 THEN ABS(tp.payout) ELSE 0 END) AS DECIMAL(18, 2)) AS chargebacks,
+    CAST(SUM(CASE WHEN tp.guest_type = 'Qualified' THEN tp.payout ELSE 0 END) AS DECIMAL(18, 2)) AS qualified_tour_pay,
+    CAST(SUM(CASE WHEN tp.guest_type = 'Courtesy' THEN tp.payout ELSE 0 END) AS DECIMAL(18, 2)) AS courtesy_tour_pay
   FROM edw_dev_hris.hgv_comp.fact_marketing_tour_payout tp
   GROUP BY tp.rep_id, tp.period_id
 )
@@ -221,8 +221,8 @@ SELECT
   'PLAN-MKT-2026' AS plan_id,
   COALESCE(t.region, 'Regional') AS assigned_area,
   CONCAT('AREA-', COALESCE(t.team_id, 'UNK')) AS bonus_area_id,
-  CAST(t.tour_payout AS DECIMAL(14, 2)) AS qtd_earnings,
-  CAST(t.tour_payout AS DECIMAL(14, 2)) AS paid_to_date,
+  CAST(t.tour_payout AS DECIMAL(18, 2)) AS qtd_earnings,
+  CAST(t.tour_payout AS DECIMAL(18, 2)) AS paid_to_date,
   CAST(t.qualified_tours AS INT) AS qualified_tours,
   CAST(t.tours_shown AS INT) AS tours_shown,
   CAST(
@@ -239,11 +239,11 @@ SELECT
     ELSE 'Director Tier'
   END AS next_tier_label,
   CAST(GREATEST(0, 10 - t.qualified_tours) AS INT) AS next_tier_gap_tours,
-  CAST(t.qualified_tour_pay AS DECIMAL(14, 2)) AS qualified_tour_pay,
-  CAST(t.courtesy_tour_pay AS DECIMAL(14, 2)) AS courtesy_tour_pay,
-  CAST(0 AS DECIMAL(14, 2)) AS penetration_spiff,
-  CAST(t.chargebacks AS DECIMAL(14, 2)) AS chargebacks,
-  CAST(t.tour_payout AS DECIMAL(14, 2)) AS total_payout,
+  CAST(t.qualified_tour_pay AS DECIMAL(18, 2)) AS qualified_tour_pay,
+  CAST(t.courtesy_tour_pay AS DECIMAL(18, 2)) AS courtesy_tour_pay,
+  CAST(0 AS DECIMAL(18, 2)) AS penetration_spiff,
+  CAST(t.chargebacks AS DECIMAL(18, 2)) AS chargebacks,
+  CAST(t.tour_payout AS DECIMAL(18, 2)) AS total_payout,
   CAST(30.00 AS DECIMAL(6, 2)) AS base_pct,
   CAST(70.00 AS DECIMAL(6, 2)) AS variable_pct,
   CAST(0 AS DECIMAL(6, 2)) AS tcc_gap_vs_market_pct
