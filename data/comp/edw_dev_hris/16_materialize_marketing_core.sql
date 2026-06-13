@@ -1,10 +1,8 @@
 -- =============================================================================
 -- MATERIALIZE marketing core (REQUIRED for interactive speed on VDI)
 -- =============================================================================
--- DATA WINDOW: app demo quarters only (matches compPeriods.ts defaults)
---   2025-Q4  2025-10-01 .. 2025-12-31
---   2026-Q1  2026-01-01 .. 2026-03-31
---   2026-Q2  2026-04-01 .. 2026-06-30
+-- DATA WINDOW: calendar year 2026 only (2026-01-01 .. 2026-12-31)
+-- Smaller than multi-year windows — fewer Cognos rows to scan on VDI.
 --
 -- Architecture fix vs prior 16:
 --   • ONE Cognos detail scan → tour-grain staging table (not transaction grain)
@@ -37,7 +35,7 @@ DROP TABLE IF EXISTS edw_dev_hris.hgv_comp._stg_marketing_tour_detail;
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp._stg_marketing_tour_detail
 USING DELTA
-COMMENT 'Tour-grain Cognos slice for marketing materialization (Q4-2025 .. Q2-2026)'
+COMMENT 'Tour-grain Cognos slice for marketing materialization (calendar 2026)'
 AS
 SELECT
   d.tour_key_hash,
@@ -54,9 +52,9 @@ FROM edw_dev_cognos.cognos_fm.it_smt_detail d
 WHERE d.tour_id IS NOT NULL
   AND (
     (d.tour_date IS NOT NULL
-      AND TO_DATE(d.tour_date) BETWEEN DATE '2025-10-01' AND DATE '2026-06-30')
+      AND TO_DATE(d.tour_date) BETWEEN DATE '2026-01-01' AND DATE '2026-12-31')
     OR (d.tour_date IS NULL
-      AND TO_DATE(d.transaction_date) BETWEEN DATE '2025-10-01' AND DATE '2026-06-30')
+      AND TO_DATE(d.transaction_date) BETWEEN DATE '2026-01-01' AND DATE '2026-12-31')
   )
 GROUP BY d.tour_key_hash, d.tour_id;
 
@@ -65,7 +63,7 @@ GROUP BY d.tour_key_hash, d.tour_id;
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.dim_marketing_rep
 USING DELTA
-COMMENT 'Materialized marketing reps (Q4-2025 .. Q2-2026) — refresh via 16_materialize_marketing_core.sql'
+COMMENT 'Materialized marketing reps (calendar 2026) — refresh via 16_materialize_marketing_core.sql'
 AS
 SELECT
   CAST(p.salesperson_1_employee_id AS STRING) AS rep_id,
@@ -89,7 +87,7 @@ GROUP BY CAST(p.salesperson_1_employee_id AS STRING);
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.fact_marketing_tour_payout
 USING DELTA
-COMMENT 'Materialized marketing tour ledger (Q4-2025 .. Q2-2026) — refresh via 16_materialize_marketing_core.sql'
+COMMENT 'Materialized marketing tour ledger (calendar 2026) — refresh via 16_materialize_marketing_core.sql'
 AS
 SELECT
   CAST(d.tour_id AS STRING) AS tour_id,
@@ -198,11 +196,11 @@ SELECT
 FROM tour_agg t;
 
 -- ---------------------------------------------------------------------------
--- Step 5) dim_period — static app periods (instant; matches compPeriods.ts)
+-- Step 5) dim_period — 2026 quarters only (instant)
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.dim_period
 USING DELTA
-COMMENT 'App demo periods — refresh via 16_materialize_marketing_core.sql'
+COMMENT '2026 comp periods — refresh via 16_materialize_marketing_core.sql'
 AS
 SELECT
   period_id,
@@ -211,12 +209,14 @@ SELECT
   period_end,
   is_current
 FROM (
-  SELECT '2026-Q2' AS period_id, 'Q2 2026' AS period_label,
-         DATE '2026-04-01' AS period_start, DATE '2026-06-30' AS period_end, TRUE AS is_current
+  SELECT '2026-Q4' AS period_id, 'Q4 2026' AS period_label,
+         DATE '2026-10-01' AS period_start, DATE '2026-12-31' AS period_end, FALSE AS is_current
+  UNION ALL
+  SELECT '2026-Q3', 'Q3 2026', DATE '2026-07-01', DATE '2026-09-30', FALSE
+  UNION ALL
+  SELECT '2026-Q2', 'Q2 2026', DATE '2026-04-01', DATE '2026-06-30', TRUE
   UNION ALL
   SELECT '2026-Q1', 'Q1 2026', DATE '2026-01-01', DATE '2026-03-31', FALSE
-  UNION ALL
-  SELECT '2025-Q4', 'Q4 2025', DATE '2025-10-01', DATE '2025-12-31', FALSE
 ) p;
 
 -- ---------------------------------------------------------------------------

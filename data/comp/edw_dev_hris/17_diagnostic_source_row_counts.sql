@@ -28,38 +28,36 @@ FROM edw_dev_cognos.cognos_fm.it_smt_marketing;
 
 
 -- -----------------------------------------------------------------------------
--- B) Script 16 demo window (Q4-2025 .. Q2-2026)
---     Matches: 2025-10-01 through 2026-06-30
+-- B) Script 16 window — calendar year 2026 (2026-01-01 .. 2026-12-31)
 -- -----------------------------------------------------------------------------
 
--- B1) Transaction rows in the demo window (what staging step 1 must scan)
-SELECT COUNT(*) AS txn_rows_in_window
+-- B1) Transaction rows in 2026 (what staging step 1 must scan)
+SELECT COUNT(*) AS txn_rows_2026
 FROM edw_dev_cognos.cognos_fm.it_smt_detail d
 WHERE d.tour_id IS NOT NULL
   AND (
     (d.tour_date IS NOT NULL
-      AND TO_DATE(d.tour_date) BETWEEN DATE '2025-10-01' AND DATE '2026-06-30')
+      AND TO_DATE(d.tour_date) BETWEEN DATE '2026-01-01' AND DATE '2026-12-31')
     OR (d.tour_date IS NULL
-      AND TO_DATE(d.transaction_date) BETWEEN DATE '2025-10-01' AND DATE '2026-06-30')
+      AND TO_DATE(d.transaction_date) BETWEEN DATE '2026-01-01' AND DATE '2026-12-31')
   );
 
 -- B2) Tour rows after collapse (target size for _stg_marketing_tour_detail)
-SELECT COUNT(*) AS tour_rows_in_window
+SELECT COUNT(*) AS tour_rows_2026
 FROM (
   SELECT d.tour_key_hash, d.tour_id
   FROM edw_dev_cognos.cognos_fm.it_smt_detail d
   WHERE d.tour_id IS NOT NULL
     AND (
       (d.tour_date IS NOT NULL
-        AND TO_DATE(d.tour_date) BETWEEN DATE '2025-10-01' AND DATE '2026-06-30')
+        AND TO_DATE(d.tour_date) BETWEEN DATE '2026-01-01' AND DATE '2026-12-31')
       OR (d.tour_date IS NULL
-        AND TO_DATE(d.transaction_date) BETWEEN DATE '2025-10-01' AND DATE '2026-06-30')
+        AND TO_DATE(d.transaction_date) BETWEEN DATE '2026-01-01' AND DATE '2026-12-31')
     )
   GROUP BY d.tour_key_hash, d.tour_id
 ) t;
 
--- B3) Ratio helper (run after B1 + B2; paste both counts)
--- txn_rows_in_window / tour_rows_in_window = avg transactions per tour in window
+-- B3) Ratio: txn_rows_2026 / tour_rows_2026 = avg transactions per tour
 
 
 -- -----------------------------------------------------------------------------
