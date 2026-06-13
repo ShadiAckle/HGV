@@ -85,6 +85,7 @@ FROM edw_dev_hris.information_schema.tables
 WHERE table_schema = 'hgv_comp'
   AND table_name IN (
     '_stg_marketing_tour_detail',
+    '_stg_tour_enriched',
     'dim_marketing_rep',
     'fact_marketing_tour_payout',
     'fact_marketing_rep_period',
@@ -99,6 +100,9 @@ FROM edw_dev_hris.hgv_comp.dim_marketing_rep
 UNION ALL
 SELECT '_stg_marketing_tour_detail', COUNT(*)
 FROM edw_dev_hris.hgv_comp._stg_marketing_tour_detail
+UNION ALL
+SELECT '_stg_tour_enriched', COUNT(*)
+FROM edw_dev_hris.hgv_comp._stg_tour_enriched
 UNION ALL
 SELECT 'fact_marketing_tour_payout', COUNT(*)
 FROM edw_dev_hris.hgv_comp.fact_marketing_tour_payout
