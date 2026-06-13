@@ -1,15 +1,21 @@
 -- =============================================================================
 -- MATERIALIZE marketing core (REQUIRED for interactive speed on VDI)
 -- =============================================================================
--- DATA WINDOW: calendar FY2025 + FY2026 only (2025-01-01 .. 2026-12-31)
--- Tuned for VDI: ~5–20 min total vs multi-hour full-history scans.
+-- DATA WINDOW: app demo quarters only (matches compPeriods.ts defaults)
+--   2025-Q4  2025-10-01 .. 2025-12-31
+--   2026-Q1  2026-01-01 .. 2026-03-31
+--   2026-Q2  2026-04-01 .. 2026-06-30
 --
--- Prerequisite: 15_apply_view_performance_governance.sql (or full 12_bootstrap)
--- Re-run safe: CREATE OR REPLACE TABLE overwrites marketing core tables.
--- If a prior run stalled: Interrupt → Pull → re-run this script (or one block at a time).
+-- Architecture fix vs prior 16:
+--   • ONE Cognos detail scan → tour-grain staging table (not transaction grain)
+--   • dim_marketing_rep + fact_marketing_tour_payout read staging (no re-scan)
+--   • dim_period = static app periods (no commissions scan)
+--
+-- If step 1 still slow: run ONLY the "Step 1" block below, wait, then steps 2–7.
+-- Interrupt any multi-hour run — prior version scanned billions of txn rows twice.
 -- =============================================================================
 
--- Dependent views + any partial tables from a stalled run
+-- Dependent views + partial tables from stalled runs
 DROP VIEW IF EXISTS edw_dev_hris.hgv_comp.fact_marketing_rep_metric;
 DROP VIEW IF EXISTS edw_dev_hris.hgv_comp.fact_marketing_chargeback;
 DROP VIEW IF EXISTS edw_dev_hris.hgv_comp.fact_marketing_arrival;
@@ -24,21 +30,43 @@ DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.fact_marketing_tour_payout;
 DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.dim_marketing_rep;
 DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.dim_period;
 DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.dim_rep;
+DROP TABLE IF EXISTS edw_dev_hris.hgv_comp._stg_marketing_tour_detail;
 
 -- ---------------------------------------------------------------------------
--- 1) dim_marketing_rep — rep picker (FY2025–FY2026 tours only)
+-- Step 1) Staging — ONE scan of it_smt_detail, collapsed to tour grain
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp._stg_marketing_tour_detail
+USING DELTA
+COMMENT 'Tour-grain Cognos slice for marketing materialization (Q4-2025 .. Q2-2026)'
+AS
+SELECT
+  d.tour_key_hash,
+  d.tour_id,
+  MAX(d.tour_key) AS tour_key,
+  MAX(d.enterprise_lead_id) AS enterprise_lead_id,
+  MAX(COALESCE(TO_DATE(d.tour_date), TO_DATE(d.transaction_date))) AS tour_date,
+  MAX(COALESCE(CAST(d.showed AS INT), 0)) = 1 AS showed_flag,
+  MAX(COALESCE(CAST(d.qualified AS INT), 0)) = 1 AS qualified_flag,
+  MAX(CAST(COALESCE(d.net_volume, 0) AS DECIMAL(14, 2))) AS net_volume,
+  MAX(COALESCE(d.lead_source_desc, 'Unknown')) AS lead_source,
+  MAX(COALESCE(d.lead_prequal_fico_tier, 'U')) AS abc_score
+FROM edw_dev_cognos.cognos_fm.it_smt_detail d
+WHERE d.tour_id IS NOT NULL
+  AND (
+    (d.tour_date IS NOT NULL
+      AND TO_DATE(d.tour_date) BETWEEN DATE '2025-10-01' AND DATE '2026-06-30')
+    OR (d.tour_date IS NULL
+      AND TO_DATE(d.transaction_date) BETWEEN DATE '2025-10-01' AND DATE '2026-06-30')
+  )
+GROUP BY d.tour_key_hash, d.tour_id;
+
+-- ---------------------------------------------------------------------------
+-- Step 2) dim_marketing_rep — from staging (no Cognos detail re-scan)
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.dim_marketing_rep
 USING DELTA
-COMMENT 'Materialized marketing reps (FY2025–FY2026) — refresh via 16_materialize_marketing_core.sql'
+COMMENT 'Materialized marketing reps (Q4-2025 .. Q2-2026) — refresh via 16_materialize_marketing_core.sql'
 AS
-WITH recent_detail AS (
-  SELECT d.tour_key_hash
-  FROM edw_dev_cognos.cognos_fm.it_smt_detail d
-  WHERE COALESCE(TO_DATE(d.tour_date), TO_DATE(d.transaction_date))
-    BETWEEN DATE '2025-01-01' AND DATE '2026-12-31'
-  GROUP BY d.tour_key_hash
-)
 SELECT
   CAST(p.salesperson_1_employee_id AS STRING) AS rep_id,
   MAX(
@@ -48,114 +76,74 @@ SELECT
   MAX(COALESCE(NULLIF(TRIM(p.sales_team_code), ''), 'TEAM-MKT')) AS team_id,
   MAX(COALESCE(NULLIF(TRIM(m.office_region), ''), 'Other')) AS region,
   TRUE AS is_active
-FROM edw_dev_cognos.cognos_fm.it_smt_personnel p
-INNER JOIN recent_detail rd
-  ON rd.tour_key_hash = p.tour_key_hash
+FROM edw_dev_hris.hgv_comp._stg_marketing_tour_detail d
+INNER JOIN edw_dev_cognos.cognos_fm.it_smt_personnel p
+  ON d.tour_key_hash = p.tour_key_hash
 LEFT JOIN edw_dev_cognos.cognos_fm.it_smt_marketing m
-  ON p.tour_key_hash = m.tour_key_hash
+  ON d.tour_key_hash = m.tour_key_hash
 WHERE p.salesperson_1_employee_id IS NOT NULL
 GROUP BY CAST(p.salesperson_1_employee_id AS STRING);
 
 -- ---------------------------------------------------------------------------
--- 2) fact_marketing_tour_payout — tour ledger (FY2025–FY2026)
+-- Step 3) fact_marketing_tour_payout — staging + marketing/personnel only
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.fact_marketing_tour_payout
 USING DELTA
-COMMENT 'Materialized marketing tour ledger (FY2025–FY2026) — refresh via 16_materialize_marketing_core.sql'
+COMMENT 'Materialized marketing tour ledger (Q4-2025 .. Q2-2026) — refresh via 16_materialize_marketing_core.sql'
 AS
-WITH recent_detail AS (
-  SELECT
-    d.tour_key_hash,
-    d.tour_id,
-    d.tour_key,
-    d.enterprise_lead_id,
-    COALESCE(TO_DATE(d.tour_date), TO_DATE(d.transaction_date)) AS tour_date,
-    COALESCE(CAST(d.showed AS INT), 0) = 1 AS showed_flag,
-    COALESCE(CAST(d.qualified AS INT), 0) = 1 AS qualified_flag,
-    CAST(COALESCE(d.net_volume, 0) AS DECIMAL(14, 2)) AS net_volume,
-    COALESCE(d.lead_source_desc, 'Unknown') AS lead_source,
-    COALESCE(d.lead_prequal_fico_tier, 'U') AS abc_score
-  FROM edw_dev_cognos.cognos_fm.it_smt_detail d
-  WHERE COALESCE(TO_DATE(d.tour_date), TO_DATE(d.transaction_date))
-    BETWEEN DATE '2025-01-01' AND DATE '2026-12-31'
-),
-tour_spine AS (
-  SELECT
-    d.tour_id,
-    d.tour_key,
-    d.enterprise_lead_id,
-    d.tour_date,
-    d.showed_flag,
-    d.qualified_flag,
-    d.net_volume,
-    d.lead_source,
-    d.abc_score,
-    m.tour_status_desc,
-    m.tour_booked_date,
-    m.office_code,
-    COALESCE(NULLIF(TRIM(m.office_region), ''), 'Other') AS office_region,
-    COALESCE(m.channel, 'Unknown') AS channel,
-    COALESCE(m.marketing_program_desc, '') AS marketing_program,
-    COALESCE(m.marketing_package_type_desc, 'Unknown') AS package_type,
-    p.salesperson_1_employee_id,
-    p.salesperson_1_name,
-    COALESCE(NULLIF(TRIM(p.sales_team_code), ''), 'TEAM-MKT') AS sales_team_code
-  FROM recent_detail d
-  LEFT JOIN edw_dev_cognos.cognos_fm.it_smt_marketing m
-    ON d.tour_key_hash = m.tour_key_hash
-  LEFT JOIN edw_dev_cognos.cognos_fm.it_smt_personnel p
-    ON d.tour_key_hash = p.tour_key_hash
-  WHERE d.tour_id IS NOT NULL
-    AND p.salesperson_1_employee_id IS NOT NULL
-    AND d.tour_date IS NOT NULL
-)
 SELECT
-  CAST(t.tour_id AS STRING) AS tour_id,
-  COALESCE(CAST(t.salesperson_1_employee_id AS STRING), 'UNASSIGNED') AS rep_id,
+  CAST(d.tour_id AS STRING) AS tour_id,
+  COALESCE(CAST(p.salesperson_1_employee_id AS STRING), 'UNASSIGNED') AS rep_id,
   CONCAT(
-    CAST(YEAR(t.tour_date) AS STRING),
+    CAST(YEAR(d.tour_date) AS STRING),
     '-Q',
-    CAST(CAST(CEIL(MONTH(t.tour_date) / 3.0) AS INT) AS STRING)
+    CAST(CAST(CEIL(MONTH(d.tour_date) / 3.0) AS INT) AS STRING)
   ) AS period_id,
-  CONCAT('Lead-', CAST(t.enterprise_lead_id AS STRING)) AS guest_name,
+  CONCAT('Lead-', CAST(d.enterprise_lead_id AS STRING)) AS guest_name,
   CASE
-    WHEN t.qualified_flag THEN 'Qualified'
-    WHEN t.showed_flag THEN 'Showed'
+    WHEN d.qualified_flag THEN 'Qualified'
+    WHEN d.showed_flag THEN 'Showed'
     ELSE 'Courtesy'
   END AS guest_type,
-  t.tour_date AS arrival_date,
-  COALESCE(t.tour_status_desc, 'Scheduled') AS tour_status,
-  COALESCE(t.channel, 'MKT') AS code,
+  d.tour_date AS arrival_date,
+  COALESCE(m.tour_status_desc, 'Scheduled') AS tour_status,
+  COALESCE(m.channel, 'MKT') AS code,
   CAST(
     CASE
-      WHEN t.qualified_flag THEN GREATEST(t.net_volume, 0) * 0.0025
-      WHEN t.showed_flag THEN 35.00
+      WHEN d.qualified_flag THEN GREATEST(d.net_volume, 0) * 0.0025
+      WHEN d.showed_flag THEN 35.00
       ELSE 0
     END AS DECIMAL(14, 2)
   ) AS payout,
-  t.qualified_flag AS fps_eligible,
-  CAST(GREATEST(t.net_volume, 0) * 0.01 AS DECIMAL(14, 2)) AS fps_potential,
-  COALESCE(t.marketing_program, '') AS notes,
-  CAST(t.enterprise_lead_id AS STRING) AS guest_id,
-  CONCAT('HH-', CAST(t.enterprise_lead_id AS STRING)) AS household_id,
-  CONCAT('LOC-', t.office_code) AS planned_tour_location_id,
+  d.qualified_flag AS fps_eligible,
+  CAST(GREATEST(d.net_volume, 0) * 0.01 AS DECIMAL(14, 2)) AS fps_potential,
+  COALESCE(m.marketing_program_desc, '') AS notes,
+  CAST(d.enterprise_lead_id AS STRING) AS guest_id,
+  CONCAT('HH-', CAST(d.enterprise_lead_id AS STRING)) AS household_id,
+  CONCAT('LOC-', m.office_code) AS planned_tour_location_id,
   CAST(NULL AS STRING) AS current_stay_location_id,
-  t.lead_source,
-  t.abc_score,
-  t.package_type,
-  CAST(t.tour_key AS STRING) AS xref_tour_id,
-  TO_DATE(t.tour_booked_date) AS tour_booked_date,
-  COALESCE(NULLIF(TRIM(t.salesperson_1_name), ''), CAST(t.salesperson_1_employee_id AS STRING)) AS rep_name,
-  COALESCE(NULLIF(TRIM(t.office_region), ''), 'Other') AS rep_region,
-  COALESCE(NULLIF(TRIM(t.sales_team_code), ''), 'TEAM-MKT') AS rep_team_id
-FROM tour_spine t;
+  d.lead_source,
+  d.abc_score,
+  COALESCE(m.marketing_package_type_desc, 'Unknown') AS package_type,
+  CAST(d.tour_key AS STRING) AS xref_tour_id,
+  TO_DATE(m.tour_booked_date) AS tour_booked_date,
+  COALESCE(NULLIF(TRIM(p.salesperson_1_name), ''), CAST(p.salesperson_1_employee_id AS STRING)) AS rep_name,
+  COALESCE(NULLIF(TRIM(m.office_region), ''), 'Other') AS rep_region,
+  COALESCE(NULLIF(TRIM(p.sales_team_code), ''), 'TEAM-MKT') AS rep_team_id
+FROM edw_dev_hris.hgv_comp._stg_marketing_tour_detail d
+INNER JOIN edw_dev_cognos.cognos_fm.it_smt_personnel p
+  ON d.tour_key_hash = p.tour_key_hash
+LEFT JOIN edw_dev_cognos.cognos_fm.it_smt_marketing m
+  ON d.tour_key_hash = m.tour_key_hash
+WHERE p.salesperson_1_employee_id IS NOT NULL
+  AND d.tour_date IS NOT NULL;
 
 -- ---------------------------------------------------------------------------
--- 3) fact_marketing_rep_period — rollup from Delta (not Cognos)
+-- Step 4) fact_marketing_rep_period — rollup from Delta tour ledger
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.fact_marketing_rep_period
 USING DELTA
-COMMENT 'Materialized marketing rep-period KPIs (FY2025–FY2026) — refresh via 16_materialize_marketing_core.sql'
+COMMENT 'Materialized marketing rep-period KPIs — refresh via 16_materialize_marketing_core.sql'
 AS
 WITH tour_agg AS (
   SELECT
@@ -210,107 +198,33 @@ SELECT
 FROM tour_agg t;
 
 -- ---------------------------------------------------------------------------
--- 4) dim_period — FY2025–FY2026 quarters only (max 8)
+-- Step 5) dim_period — static app periods (instant; matches compPeriods.ts)
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.dim_period
 USING DELTA
-COMMENT 'Materialized comp periods (FY2025–FY2026) — refresh via 16_materialize_marketing_core.sql'
+COMMENT 'App demo periods — refresh via 16_materialize_marketing_core.sql'
 AS
-WITH commission_quarters AS (
-  SELECT
-    CONCAT(
-      CAST(YEAR(TO_DATE(payDate)) AS STRING),
-      '-Q',
-      CAST(CAST(CEIL(MONTH(TO_DATE(payDate)) / 3.0) AS INT) AS STRING)
-    ) AS period_id,
-    CONCAT(
-      'Q',
-      CAST(CAST(CEIL(MONTH(TO_DATE(payDate)) / 3.0) AS INT) AS STRING),
-      ' ',
-      CAST(YEAR(TO_DATE(payDate)) AS STRING)
-    ) AS period_label,
-    MAKE_DATE(
-      YEAR(TO_DATE(payDate)),
-      CAST((CAST(CEIL(MONTH(TO_DATE(payDate)) / 3.0) AS INT) - 1) * 3 + 1 AS INT),
-      1
-    ) AS period_start,
-    LAST_DAY(
-      MAKE_DATE(
-        YEAR(TO_DATE(payDate)),
-        CAST(CAST(CEIL(MONTH(TO_DATE(payDate)) / 3.0) AS INT) * 3 AS INT),
-        1
-      )
-    ) AS period_end
-  FROM edw_dev_hris.pwcmodels.commissions
-  WHERE payDate IS NOT NULL
-    AND TO_DATE(payDate) BETWEEN DATE '2025-01-01' AND DATE '2026-12-31'
-  GROUP BY 1, 2, 3, 4
-),
-tour_quarters AS (
-  SELECT
-    period_id,
-    MAX(period_label) AS period_label,
-    MIN(period_start) AS period_start,
-    MAX(period_end) AS period_end
-  FROM (
-    SELECT
-      CONCAT(
-        CAST(YEAR(tp.arrival_date) AS STRING),
-        '-Q',
-        CAST(CAST(CEIL(MONTH(tp.arrival_date) / 3.0) AS INT) AS STRING)
-      ) AS period_id,
-      CONCAT(
-        'Q',
-        CAST(CAST(CEIL(MONTH(tp.arrival_date) / 3.0) AS INT) AS STRING),
-        ' ',
-        CAST(YEAR(tp.arrival_date) AS STRING)
-      ) AS period_label,
-      MAKE_DATE(
-        YEAR(tp.arrival_date),
-        CAST((CAST(CEIL(MONTH(tp.arrival_date) / 3.0) AS INT) - 1) * 3 + 1 AS INT),
-        1
-      ) AS period_start,
-      LAST_DAY(
-        MAKE_DATE(
-          YEAR(tp.arrival_date),
-          CAST(CAST(CEIL(MONTH(tp.arrival_date) / 3.0) AS INT) * 3 AS INT),
-          1
-        )
-      ) AS period_end
-    FROM edw_dev_hris.hgv_comp.fact_marketing_tour_payout tp
-    WHERE tp.arrival_date IS NOT NULL
-  ) q
-  GROUP BY period_id
-),
-merged AS (
-  SELECT period_id, period_label, period_start, period_end FROM commission_quarters
-  UNION
-  SELECT period_id, period_label, period_start, period_end FROM tour_quarters
-),
-ranked AS (
-  SELECT
-    period_id,
-    period_label,
-    period_start,
-    period_end,
-    ROW_NUMBER() OVER (ORDER BY period_start DESC) AS rn
-  FROM merged
-  WHERE period_start BETWEEN DATE '2025-01-01' AND DATE '2026-12-31'
-)
 SELECT
   period_id,
   period_label,
   period_start,
   period_end,
-  (rn = 1) AS is_current
-FROM ranked;
+  is_current
+FROM (
+  SELECT '2026-Q2' AS period_id, 'Q2 2026' AS period_label,
+         DATE '2026-04-01' AS period_start, DATE '2026-06-30' AS period_end, TRUE AS is_current
+  UNION ALL
+  SELECT '2026-Q1', 'Q1 2026', DATE '2026-01-01', DATE '2026-03-31', FALSE
+  UNION ALL
+  SELECT '2025-Q4', 'Q4 2025', DATE '2025-10-01', DATE '2025-12-31', FALSE
+) p;
 
 -- ---------------------------------------------------------------------------
--- 5) dim_rep — marketing reps + field reps (FY2025–FY2026 commissions)
+-- Step 6) dim_rep — marketing reps only (skip commissions scan for VDI speed)
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.dim_rep
 USING DELTA
-COMMENT 'Materialized rep directory (FY2025–FY2026) — refresh via 16_materialize_marketing_core.sql'
+COMMENT 'Materialized rep directory (marketing) — refresh via 16_materialize_marketing_core.sql'
 AS
 SELECT
   rep_id,
@@ -320,33 +234,10 @@ SELECT
   CAST(NULL AS STRING) AS manager_rep_id,
   region,
   is_active
-FROM edw_dev_hris.hgv_comp.dim_marketing_rep
-
-UNION ALL
-
-SELECT
-  c.participant AS rep_id,
-  MAX(c.participant) AS rep_name,
-  MAX(
-    CASE
-      WHEN LOWER(c.title) LIKE '%manager%' THEN 'L8'
-      WHEN LOWER(c.title) LIKE '%train%' THEN 'L5'
-      ELSE 'L6'
-    END
-  ) AS level_code,
-  MAX(COALESCE(NULLIF(TRIM(c.businessUnit), ''), 'TEAM-FIELD')) AS team_id,
-  CAST(NULL AS STRING) AS manager_rep_id,
-  'Field' AS region,
-  TRUE AS is_active
-FROM edw_dev_hris.pwcmodels.commissions c
-WHERE c.participant IS NOT NULL
-  AND c.payDate IS NOT NULL
-  AND TO_DATE(c.payDate) BETWEEN DATE '2025-01-01' AND DATE '2026-12-31'
-  AND c.participant NOT IN (SELECT rep_id FROM edw_dev_hris.hgv_comp.dim_marketing_rep)
-GROUP BY c.participant;
+FROM edw_dev_hris.hgv_comp.dim_marketing_rep;
 
 -- ---------------------------------------------------------------------------
--- 6) Thin views on materialized tables (chargebacks, metrics, arrivals)
+-- Step 7) Thin views on materialized tables
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp.fact_marketing_rep_metric AS
 WITH base AS (
@@ -410,9 +301,9 @@ WHERE t.tour_status IN ('Scheduled', 'Booked', 'Confirmed')
    OR t.arrival_date >= CURRENT_DATE();
 
 -- ---------------------------------------------------------------------------
--- Smoke (should be seconds after materialization completes):
+-- Smoke (seconds after completion):
 -- ---------------------------------------------------------------------------
+-- SELECT COUNT(*) FROM edw_dev_hris.hgv_comp._stg_marketing_tour_detail;
 -- SELECT COUNT(*) FROM edw_dev_hris.hgv_comp.dim_marketing_rep;
 -- SELECT COUNT(*) FROM edw_dev_hris.hgv_comp.fact_marketing_tour_payout;
--- SELECT table_name, table_type FROM edw_dev_hris.information_schema.tables
---   WHERE table_schema = 'hgv_comp' AND table_name LIKE '%marketing%';
+-- SELECT * FROM edw_dev_hris.hgv_comp.dim_period ORDER BY period_start;
