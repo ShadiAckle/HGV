@@ -4,25 +4,25 @@
 -- DATA WINDOW: calendar year 2026 only (2026-01-01 .. 2026-12-31)
 --
 -- Step order (run one block at a time if needed):
---   1  _stg_marketing_tour_detail     — ONE Cognos detail scan (slowest)
---   2  _stg_tour_enriched             — ONE Cognos personnel/marketing join
+--   1  _stg_marketing_tour_detail     — marketing spine (163K tours) + detail join
+--   2  _stg_tour_enriched             — personnel join only
 --   3  fact_marketing_tour_payout     — Delta → Delta (fast)
 --   4  dim_marketing_rep              — from tour_payout only (fast, no Cognos)
 --   5–8  rollups, periods, views      — seconds
 --
--- Warehouse: Serverless Starter works but CTAS on Cognos is slow. If step 1
--- exceeds 30 min, ask admin for a larger PRO SQL warehouse for this one-time load.
+-- VDI baseline (2026): txn_rows ~1.23M, marketing tour_keys ~163K (~7.5 txn/tour).
+-- Step 1 seeds from it_smt_marketing (tour grain), not a full detail date scan.
 -- =============================================================================
 
 -- Dependent views + partial tables from stalled runs
-DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.fact_marketing_rep_metric;
-DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.fact_marketing_chargeback;
-DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.fact_marketing_arrival;
-DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.fact_marketing_rep_period;
-DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.fact_marketing_tour_payout;
-DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.dim_marketing_rep;
-DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.dim_period;
-DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.dim_rep;
+DROP VIEW IF EXISTS edw_dev_hris.hgv_comp.fact_marketing_rep_metric;
+DROP VIEW IF EXISTS edw_dev_hris.hgv_comp.fact_marketing_chargeback;
+DROP VIEW IF EXISTS edw_dev_hris.hgv_comp.fact_marketing_arrival;
+DROP VIEW IF EXISTS edw_dev_hris.hgv_comp.fact_marketing_rep_period;
+DROP VIEW IF EXISTS edw_dev_hris.hgv_comp.fact_marketing_tour_payout;
+DROP VIEW IF EXISTS edw_dev_hris.hgv_comp.dim_marketing_rep;
+DROP VIEW IF EXISTS edw_dev_hris.hgv_comp.dim_period;
+DROP VIEW IF EXISTS edw_dev_hris.hgv_comp.dim_rep;
 
 DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.fact_marketing_rep_period;
 DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.fact_marketing_tour_payout;
@@ -33,45 +33,66 @@ DROP TABLE IF EXISTS edw_dev_hris.hgv_comp._stg_tour_enriched;
 DROP TABLE IF EXISTS edw_dev_hris.hgv_comp._stg_marketing_tour_detail;
 
 -- ---------------------------------------------------------------------------
--- Step 1) Staging — ONE scan of it_smt_detail, collapsed to tour grain
+-- Step 1) Staging — marketing spine (2026) + detail metrics for those tours only
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp._stg_marketing_tour_detail
 USING DELTA
-COMMENT 'Tour-grain Cognos slice (calendar 2026)'
+COMMENT 'Tour-grain 2026 slice — marketing-led join to detail (VDI ~163K tours)'
 AS
+WITH tours_2026 AS (
+  SELECT
+    m.tour_key_hash,
+    m.tour_id,
+    m.tour_status_desc,
+    m.tour_booked_date,
+    m.office_code,
+    COALESCE(NULLIF(TRIM(m.office_region), ''), 'Other') AS office_region,
+    COALESCE(m.channel, 'MKT') AS channel,
+    COALESCE(m.marketing_program_desc, '') AS marketing_program,
+    COALESCE(m.marketing_package_type_desc, 'Unknown') AS package_type
+  FROM edw_dev_cognos.cognos_fm.it_smt_marketing m
+  WHERE m.tour_key_hash IS NOT NULL
+    AND m.tour_id IS NOT NULL
+    AND m.tour_booked_date IS NOT NULL
+    AND TO_DATE(m.tour_booked_date) BETWEEN DATE '2026-01-01' AND DATE '2026-12-31'
+)
 SELECT
-*
-  FROM edw_dev_cognos.cognos_fm.it_smt_detail d
-WHERE d.tour_id IS NOT NULL
-ORDER by tour_id
-LIMIT 5000
-
+  t.tour_key_hash,
+  t.tour_id,
   MAX(d.tour_key) AS tour_key,
   MAX(d.enterprise_lead_id) AS enterprise_lead_id,
-  MAX(COALESCE(TO_DATE(d.tour_date), TO_DATE(d.transaction_date))) AS tour_date,
+  MAX(
+    COALESCE(
+      TO_DATE(d.tour_date),
+      TO_DATE(d.transaction_date),
+      TO_DATE(t.tour_booked_date)
+    )
+  ) AS tour_date,
   MAX(COALESCE(CAST(d.showed AS INT), 0)) = 1 AS showed_flag,
   MAX(COALESCE(CAST(d.qualified AS INT), 0)) = 1 AS qualified_flag,
   MAX(CAST(COALESCE(d.net_volume, 0) AS DECIMAL(14, 2))) AS net_volume,
   MAX(COALESCE(d.lead_source_desc, 'Unknown')) AS lead_source,
-  MAX(COALESCE(d.lead_prequal_fico_tier, 'U')) AS abc_score
-FROM edw_dev_cognos.cognos_fm.it_smt_detail d
-WHERE d.tour_id IS NOT NULL
-  AND (
-    (d.tour_date IS NOT NULL
-      AND TO_DATE(d.tour_date) BETWEEN DATE '2026-01-01' AND DATE '2026-12-31')
-    OR (d.tour_date IS NULL
-      AND TO_DATE(d.transaction_date) BETWEEN DATE '2026-01-01' AND DATE '2026-12-31')
-  )
-GROUP BY d.tour_key_hash, d.tour_id;
+  MAX(COALESCE(d.lead_prequal_fico_tier, 'U')) AS abc_score,
+  MAX(t.tour_status_desc) AS tour_status_desc,
+  MAX(t.tour_booked_date) AS tour_booked_date,
+  MAX(t.office_code) AS office_code,
+  MAX(t.office_region) AS office_region,
+  MAX(t.channel) AS channel,
+  MAX(t.marketing_program) AS marketing_program,
+  MAX(t.package_type) AS package_type
+FROM tours_2026 t
+INNER JOIN edw_dev_cognos.cognos_fm.it_smt_detail d
+  ON d.tour_key_hash = t.tour_key_hash
+GROUP BY t.tour_key_hash, t.tour_id;
 
--- CHECK: SELECT COUNT(*) FROM edw_dev_hris.hgv_comp._stg_marketing_tour_detail;
+-- CHECK: expect ~163K rows — SELECT COUNT(*) FROM edw_dev_hris.hgv_comp._stg_marketing_tour_detail;
 
 -- ---------------------------------------------------------------------------
--- Step 2) Enriched staging — ONE join to personnel + marketing (not twice)
+-- Step 2) Enriched staging — personnel only (marketing already in step 1)
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp._stg_tour_enriched
 USING DELTA
-COMMENT '2026 tours enriched with personnel/marketing — refresh via script 16'
+COMMENT '2026 tours + rep assignment — refresh via script 16'
 AS
 SELECT
   d.tour_key_hash,
@@ -84,21 +105,19 @@ SELECT
   d.net_volume,
   d.lead_source,
   d.abc_score,
+  d.tour_status_desc,
+  d.tour_booked_date,
+  d.office_code,
+  d.office_region,
+  d.channel,
+  d.marketing_program,
+  d.package_type,
   p.salesperson_1_employee_id,
   p.salesperson_1_name,
-  COALESCE(NULLIF(TRIM(p.sales_team_code), ''), 'TEAM-MKT') AS sales_team_code,
-  m.tour_status_desc,
-  m.tour_booked_date,
-  m.office_code,
-  COALESCE(NULLIF(TRIM(m.office_region), ''), 'Other') AS office_region,
-  COALESCE(m.channel, 'MKT') AS channel,
-  COALESCE(m.marketing_program_desc, '') AS marketing_program,
-  COALESCE(m.marketing_package_type_desc, 'Unknown') AS package_type
+  COALESCE(NULLIF(TRIM(p.sales_team_code), ''), 'TEAM-MKT') AS sales_team_code
 FROM edw_dev_hris.hgv_comp._stg_marketing_tour_detail d
 INNER JOIN edw_dev_cognos.cognos_fm.it_smt_personnel p
   ON d.tour_key_hash = p.tour_key_hash
-LEFT JOIN edw_dev_cognos.cognos_fm.it_smt_marketing m
-  ON d.tour_key_hash = m.tour_key_hash
 WHERE p.salesperson_1_employee_id IS NOT NULL
   AND d.tour_date IS NOT NULL;
 
