@@ -5,7 +5,7 @@
 --
 -- Step order (run one block at a time if needed):
 --   1  _stg_marketing_tour_detail     — marketing spine (163K tours) + detail join
---   2  _stg_tour_enriched             — personnel join only
+--   2  _stg_tour_enriched             — OPC personnel join (opc_person_1, not salesperson_1)
 --   3  fact_marketing_tour_payout     — Delta → Delta (fast)
 --   4  dim_marketing_rep              — from tour_payout only (fast, no Cognos)
 --   5–8  rollups, periods, views      — seconds
@@ -88,12 +88,31 @@ GROUP BY t.tour_key_hash, t.tour_id;
 -- CHECK: expect ~163K rows — SELECT COUNT(*) FROM edw_dev_hris.hgv_comp._stg_marketing_tour_detail;
 
 -- ---------------------------------------------------------------------------
--- Step 2) Enriched staging — personnel only (marketing already in step 1)
+-- Step 2) Enriched staging — OPC marketing rep (not field salesperson_1)
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp._stg_tour_enriched
 USING DELTA
-COMMENT '2026 tours + rep assignment — refresh via script 16'
+COMMENT '2026 tours + OPC rep assignment — refresh via script 16'
 AS
+WITH personnel_one AS (
+  SELECT
+    tour_key_hash,
+    opc_person_1_employee_id,
+    opc_person_1_name,
+    opc_team_code,
+    ROW_NUMBER() OVER (
+      PARTITION BY tour_key_hash
+      ORDER BY
+        CASE
+          WHEN opc_person_1_employee_id IS NOT NULL
+            AND CAST(opc_person_1_employee_id AS BIGINT) <> 0
+          THEN 0
+          ELSE 1
+        END,
+        opc_person_1_employee_id DESC
+    ) AS rn
+  FROM edw_dev_cognos.cognos_fm.it_smt_personnel
+)
 SELECT
   d.tour_key_hash,
   d.tour_id,
@@ -112,14 +131,15 @@ SELECT
   d.channel,
   d.marketing_program,
   d.package_type,
-  p.salesperson_1_employee_id,
-  p.salesperson_1_name,
-  COALESCE(NULLIF(TRIM(p.sales_team_code), ''), 'TEAM-MKT') AS sales_team_code
+  p.opc_person_1_employee_id,
+  p.opc_person_1_name,
+  COALESCE(NULLIF(TRIM(p.opc_team_code), ''), 'TEAM-MKT') AS opc_team_code
 FROM edw_dev_hris.hgv_comp._stg_marketing_tour_detail d
-INNER JOIN edw_dev_cognos.cognos_fm.it_smt_personnel p
+INNER JOIN personnel_one p
   ON d.tour_key_hash = p.tour_key_hash
-WHERE p.salesperson_1_employee_id IS NOT NULL
-  AND d.tour_date IS NOT NULL;
+  AND p.rn = 1
+WHERE p.opc_person_1_employee_id IS NOT NULL
+  AND CAST(p.opc_person_1_employee_id AS BIGINT) <> 0;
 
 -- CHECK: SELECT COUNT(*) FROM edw_dev_hris.hgv_comp._stg_tour_enriched;
 
@@ -132,7 +152,7 @@ COMMENT 'Materialized marketing tour ledger (calendar 2026)'
 AS
 SELECT
   CAST(t.tour_id AS STRING) AS tour_id,
-  COALESCE(CAST(t.salesperson_1_employee_id AS STRING), 'UNASSIGNED') AS rep_id,
+  COALESCE(CAST(t.opc_person_1_employee_id AS STRING), 'UNASSIGNED') AS rep_id,
   CONCAT(
     CAST(YEAR(t.tour_date) AS STRING),
     '-Q',
@@ -149,13 +169,18 @@ SELECT
   COALESCE(t.channel, 'MKT') AS code,
   CAST(
     CASE
-      WHEN t.qualified_flag THEN GREATEST(t.net_volume, 0) * 0.0025
+      WHEN t.qualified_flag THEN 75.00
       WHEN t.showed_flag THEN 35.00
-      ELSE 0
+      ELSE 20.00
     END AS DECIMAL(14, 2)
   ) AS payout,
   t.qualified_flag AS fps_eligible,
-  CAST(GREATEST(t.net_volume, 0) * 0.01 AS DECIMAL(14, 2)) AS fps_potential,
+  CAST(
+    CASE
+      WHEN t.qualified_flag THEN LEAST(GREATEST(t.net_volume, 0) * 0.01, 500.00)
+      ELSE 0
+    END AS DECIMAL(14, 2)
+  ) AS fps_potential,
   COALESCE(t.marketing_program, '') AS notes,
   CAST(t.enterprise_lead_id AS STRING) AS guest_id,
   CONCAT('HH-', CAST(t.enterprise_lead_id AS STRING)) AS household_id,
@@ -166,9 +191,9 @@ SELECT
   t.package_type,
   CAST(t.tour_key AS STRING) AS xref_tour_id,
   TO_DATE(t.tour_booked_date) AS tour_booked_date,
-  COALESCE(NULLIF(TRIM(t.salesperson_1_name), ''), CAST(t.salesperson_1_employee_id AS STRING)) AS rep_name,
+  COALESCE(NULLIF(TRIM(t.opc_person_1_name), ''), CAST(t.opc_person_1_employee_id AS STRING)) AS rep_name,
   COALESCE(t.office_region, 'Other') AS rep_region,
-  COALESCE(t.sales_team_code, 'TEAM-MKT') AS rep_team_id
+  COALESCE(t.opc_team_code, 'TEAM-MKT') AS rep_team_id
 FROM edw_dev_hris.hgv_comp._stg_tour_enriched t;
 
 -- ---------------------------------------------------------------------------

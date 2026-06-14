@@ -46,7 +46,7 @@ export async function fetchCompMetadata(runSql: RunSql) {
     WHERE rep_id IS NOT NULL
       AND NOT rep_id LIKE 'PERSONA-MKT-%'
     ORDER BY rep_name
-    LIMIT 50
+    LIMIT 500
   `);
 
   const marketingIdentities =
