@@ -47,3 +47,9 @@ GRANT MODIFY ON TABLE edw_dev_hris.hgv_comp.bridge_tour_guest TO `d8d67f27-1896-
 GRANT MODIFY ON TABLE edw_dev_hris.hgv_comp.fact_guest_ownership TO `d8d67f27-1896-4549-9351-e7b53a9df800`;
 GRANT MODIFY ON TABLE edw_dev_hris.hgv_comp.fact_guest_rental_stay TO `d8d67f27-1896-4549-9351-e7b53a9df800`;
 GRANT MODIFY ON TABLE edw_dev_hris.hgv_comp.fact_guest_tour_history TO `d8d67f27-1896-4549-9351-e7b53a9df800`;
+
+-- Compensation config tables (admin self-service rules)
+GRANT MODIFY ON TABLE edw_dev_hris.hgv_comp.dim_tour_status_config TO `d8d67f27-1896-4549-9351-e7b53a9df800`;
+GRANT MODIFY ON TABLE edw_dev_hris.hgv_comp.dim_comp_rule_config TO `d8d67f27-1896-4549-9351-e7b53a9df800`;
+GRANT MODIFY ON TABLE edw_dev_hris.hgv_comp.dim_rep_filter_config TO `d8d67f27-1896-4549-9351-e7b53a9df800`;
+GRANT MODIFY ON TABLE edw_dev_hris.hgv_comp.fact_comp_config_audit_log TO `d8d67f27-1896-4549-9351-e7b53a9df800`;

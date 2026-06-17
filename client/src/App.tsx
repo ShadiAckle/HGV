@@ -8,6 +8,7 @@ import { CompOverviewPage } from './pages/comp/CompOverviewPage';
 import { AdminConsolePage } from './pages/admin/AdminConsolePage';
 import { CompAdminPage } from './pages/comp/CompAdminPage';
 import { FinancePage } from './pages/comp/FinancePage';
+import { CompensationRulesPage } from './pages/admin/CompensationRulesPage';
 import { AppContextProvider, useAppContext } from './context/AppContext';
 import { resolveRoleTitle } from './data/identityCatalog';
 import { Loader2 } from 'lucide-react';
@@ -123,6 +124,10 @@ function Layout() {
                 <NavLink to="/comp-admin" className={navLinkClass} id="nav-comp-admin">
                   <ClipboardCheck size={13} style={{ marginRight: 4, verticalAlign: 'middle', display: 'inline' }} />
                   Comp Admin
+                </NavLink>
+                <NavLink to="/compensation-rules" className={navLinkClass} id="nav-comp-rules">
+                  <Settings size={13} style={{ marginRight: 4, verticalAlign: 'middle', display: 'inline' }} />
+                  Comp Rules
                 </NavLink>
                 <NavLink to="/finance" className={navLinkClass} id="nav-finance">
                   <TrendingUp size={13} style={{ marginRight: 4, verticalAlign: 'middle', display: 'inline' }} />
@@ -350,6 +355,7 @@ const router = createBrowserRouter([
       { path: '/team',          element: <TeamPerformancePage /> },
       { path: '/admin-console',  element: <AdminConsolePage /> },
       { path: '/comp-admin',     element: <CompAdminPage /> },
+      { path: '/compensation-rules', element: <CompensationRulesPage /> },
       { path: '/finance',        element: <FinancePage /> },
       { path: '/how-to',        element: <HowToPage /> },
       { path: '*',              element: <Navigate to="/" replace /> },

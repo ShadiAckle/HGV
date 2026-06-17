@@ -170,6 +170,7 @@ export async function ensureCompExtensions(runSql: RunSql): Promise<void> {
   await reconcileMarketingNetPayouts(runSql);
   await reconcileJasonDealCredits(runSql);
   await ensureQuestionCatalogSeed(runSql);
+  await ensureCompConfigTables(runSql);
 }
 
 async function reconcilePlanIdYears(runSql: RunSql): Promise<void> {
@@ -550,4 +551,164 @@ async function seedMarketingBenchmarkData(runSql: RunSql): Promise<void> {
       console.warn('Marketing seed skipped:', err instanceof Error ? err.message : err);
     }
   }
+}
+
+/**
+ * Ensure compensation config tables exist with default seed values.
+ * Idempotent: only inserts if config rows don't already exist.
+ */
+async function ensureCompConfigTables(runSql: RunSql): Promise<void> {
+  const ddl = [
+    `CREATE TABLE IF NOT EXISTS workspace.hgv_comp.dim_tour_status_config (
+      config_id STRING NOT NULL, tour_status_desc STRING, payout_amount DECIMAL(10, 2) NOT NULL,
+      is_active BOOLEAN NOT NULL DEFAULT TRUE, effective_date DATE NOT NULL, end_date DATE,
+      rule_description STRING, modified_by STRING NOT NULL, modified_at TIMESTAMP NOT NULL,
+      created_at TIMESTAMP NOT NULL
+    ) USING DELTA`,
+
+    `CREATE TABLE IF NOT EXISTS workspace.hgv_comp.dim_comp_rule_config (
+      config_id STRING NOT NULL, rule_name STRING NOT NULL, rule_value STRING NOT NULL,
+      rule_parameters STRING, is_active BOOLEAN NOT NULL DEFAULT TRUE, effective_date DATE NOT NULL,
+      end_date DATE, rule_description STRING, modified_by STRING NOT NULL,
+      modified_at TIMESTAMP NOT NULL, created_at TIMESTAMP NOT NULL
+    ) USING DELTA`,
+
+    `CREATE TABLE IF NOT EXISTS workspace.hgv_comp.dim_rep_filter_config (
+      config_id STRING NOT NULL, filter_type STRING NOT NULL, filter_value STRING NOT NULL,
+      filter_parameters STRING, is_active BOOLEAN NOT NULL DEFAULT TRUE, effective_date DATE NOT NULL,
+      end_date DATE, rule_description STRING, modified_by STRING NOT NULL,
+      modified_at TIMESTAMP NOT NULL, created_at TIMESTAMP NOT NULL
+    ) USING DELTA`,
+
+    `CREATE TABLE IF NOT EXISTS workspace.hgv_comp.fact_comp_config_audit_log (
+      audit_id STRING NOT NULL, config_table STRING NOT NULL, config_id STRING NOT NULL,
+      action_type STRING NOT NULL, old_value STRING, new_value STRING,
+      modified_by STRING NOT NULL, modified_at TIMESTAMP NOT NULL,
+      client_ip STRING, user_agent STRING
+    ) USING DELTA`,
+  ];
+
+  for (const stmt of ddl) {
+    try {
+      await runSql(stmt);
+    } catch (err) {
+      console.warn('Comp config DDL skipped:', err instanceof Error ? err.message : err);
+    }
+  }
+
+  // Default tour status mappings (idempotent)
+  const tourStatusSeeds = [
+    // SHOW status
+    `INSERT INTO workspace.hgv_comp.dim_tour_status_config
+      (config_id, tour_status_desc, payout_amount, is_active, effective_date, end_date, rule_description, modified_by, modified_at, created_at)
+     SELECT 'TS-SHOW-001', 'SHOW', 50.00, TRUE, DATE '2026-01-01', NULL, 'Standard show payout', 'system', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()
+     WHERE NOT EXISTS (SELECT 1 FROM workspace.hgv_comp.dim_tour_status_config WHERE config_id = 'TS-SHOW-001')`,
+
+    // TOUR status (most common in 2026 data)
+    `INSERT INTO workspace.hgv_comp.dim_tour_status_config
+      (config_id, tour_status_desc, payout_amount, is_active, effective_date, end_date, rule_description, modified_by, modified_at, created_at)
+     SELECT 'TS-TOUR-001', 'TOUR', 50.00, TRUE, DATE '2026-01-01', NULL, 'Completed tour payout', 'system', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()
+     WHERE NOT EXISTS (SELECT 1 FROM workspace.hgv_comp.dim_tour_status_config WHERE config_id = 'TS-TOUR-001')`,
+
+    // NO SHOW status
+    `INSERT INTO workspace.hgv_comp.dim_tour_status_config
+      (config_id, tour_status_desc, payout_amount, is_active, effective_date, end_date, rule_description, modified_by, modified_at, created_at)
+     SELECT 'TS-NOSHOW-001', 'NO SHOW', 25.00, TRUE, DATE '2026-01-01', NULL, 'No-show partial payout', 'system', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()
+     WHERE NOT EXISTS (SELECT 1 FROM workspace.hgv_comp.dim_tour_status_config WHERE config_id = 'TS-NOSHOW-001')`,
+
+    // CANCELLED status
+    `INSERT INTO workspace.hgv_comp.dim_tour_status_config
+      (config_id, tour_status_desc, payout_amount, is_active, effective_date, end_date, rule_description, modified_by, modified_at, created_at)
+     SELECT 'TS-CANCELLED-001', 'CANCELLED', 0.00, TRUE, DATE '2026-01-01', NULL, 'Cancelled tour - no payout', 'system', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()
+     WHERE NOT EXISTS (SELECT 1 FROM workspace.hgv_comp.dim_tour_status_config WHERE config_id = 'TS-CANCELLED-001')`,
+
+    // CANCELED (alternate spelling)
+    `INSERT INTO workspace.hgv_comp.dim_tour_status_config
+      (config_id, tour_status_desc, payout_amount, is_active, effective_date, end_date, rule_description, modified_by, modified_at, created_at)
+     SELECT 'TS-CANCELED-001', 'CANCELED', 0.00, TRUE, DATE '2026-01-01', NULL, 'Canceled tour - no payout', 'system', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()
+     WHERE NOT EXISTS (SELECT 1 FROM workspace.hgv_comp.dim_tour_status_config WHERE config_id = 'TS-CANCELED-001')`,
+
+    // SHOW - NO TOUR
+    `INSERT INTO workspace.hgv_comp.dim_tour_status_config
+      (config_id, tour_status_desc, payout_amount, is_active, effective_date, end_date, rule_description, modified_by, modified_at, created_at)
+     SELECT 'TS-SHOWNOTOUR-001', 'SHOW - NO TOUR', 0.00, TRUE, DATE '2026-01-01', NULL, 'Guest showed but did not tour', 'system', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()
+     WHERE NOT EXISTS (SELECT 1 FROM workspace.hgv_comp.dim_tour_status_config WHERE config_id = 'TS-SHOWNOTOUR-001')`,
+
+    // BOOKED status
+    `INSERT INTO workspace.hgv_comp.dim_tour_status_config
+      (config_id, tour_status_desc, payout_amount, is_active, effective_date, end_date, rule_description, modified_by, modified_at, created_at)
+     SELECT 'TS-BOOKED-001', 'BOOKED', 0.00, TRUE, DATE '2026-01-01', NULL, 'Tour booked but not occurred - no payout until completion', 'system', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()
+     WHERE NOT EXISTS (SELECT 1 FROM workspace.hgv_comp.dim_tour_status_config WHERE config_id = 'TS-BOOKED-001')`,
+
+    // BOOK (alternate)
+    `INSERT INTO workspace.hgv_comp.dim_tour_status_config
+      (config_id, tour_status_desc, payout_amount, is_active, effective_date, end_date, rule_description, modified_by, modified_at, created_at)
+     SELECT 'TS-BOOK-001', 'BOOK', 0.00, TRUE, DATE '2026-01-01', NULL, 'Tour booked but not occurred - no payout until completion', 'system', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()
+     WHERE NOT EXISTS (SELECT 1 FROM workspace.hgv_comp.dim_tour_status_config WHERE config_id = 'TS-BOOK-001')`,
+
+    // NULL status (36.6% of 2026 data) - default to 0 payout until clarified
+    `INSERT INTO workspace.hgv_comp.dim_tour_status_config
+      (config_id, tour_status_desc, payout_amount, is_active, effective_date, end_date, rule_description, modified_by, modified_at, created_at)
+     SELECT 'TS-NULL-001', '__NULL__', 0.00, TRUE, DATE '2026-01-01', NULL, 'Unknown/null status - awaiting stakeholder clarification', 'system', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()
+     WHERE NOT EXISTS (SELECT 1 FROM workspace.hgv_comp.dim_tour_status_config WHERE config_id = 'TS-NULL-001')`,
+  ];
+
+  for (const stmt of tourStatusSeeds) {
+    try {
+      await runSql(stmt);
+    } catch (err) {
+      console.warn('Tour status seed skipped:', err instanceof Error ? err.message : err);
+    }
+  }
+
+  // Default compensation rules (idempotent)
+  const compRuleSeeds = [
+    // Multi-rep credit policy
+    `INSERT INTO workspace.hgv_comp.dim_comp_rule_config
+      (config_id, rule_name, rule_value, rule_parameters, is_active, effective_date, end_date, rule_description, modified_by, modified_at, created_at)
+     SELECT 'CR-MULTIREP-001', 'multi_rep_credit_policy', 'first_rep_only', NULL, TRUE, DATE '2026-01-01', NULL,
+       'When multiple OPC reps listed, credit 100% to first rep (opc_person_1_name)', 'system', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()
+     WHERE NOT EXISTS (SELECT 1 FROM workspace.hgv_comp.dim_comp_rule_config WHERE config_id = 'CR-MULTIREP-001')`,
+
+    // Min tour count threshold for dim_marketing_rep inclusion
+    `INSERT INTO workspace.hgv_comp.dim_comp_rule_config
+      (config_id, rule_name, rule_value, rule_parameters, is_active, effective_date, end_date, rule_description, modified_by, modified_at, created_at)
+     SELECT 'CR-MINCOUNT-001', 'min_tour_count_threshold', '0', NULL, TRUE, DATE '2026-01-01', NULL,
+       'Minimum tour count for rep to appear in dim_marketing_rep (0 = no filter)', 'system', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()
+     WHERE NOT EXISTS (SELECT 1 FROM workspace.hgv_comp.dim_comp_rule_config WHERE config_id = 'CR-MINCOUNT-001')`,
+  ];
+
+  for (const stmt of compRuleSeeds) {
+    try {
+      await runSql(stmt);
+    } catch (err) {
+      console.warn('Comp rule seed skipped:', err instanceof Error ? err.message : err);
+    }
+  }
+
+  // Default rep filter rules (idempotent)
+  const repFilterSeeds = [
+    // Exclude generic rep names
+    `INSERT INTO workspace.hgv_comp.dim_rep_filter_config
+      (config_id, filter_type, filter_value, filter_parameters, is_active, effective_date, end_date, rule_description, modified_by, modified_at, created_at)
+     SELECT 'RF-EXCLUDE-001', 'exclude_pattern', 'UNASSIGNED', NULL, FALSE, DATE '2026-01-01', NULL,
+       'Exclude reps with name containing UNASSIGNED (currently disabled)', 'system', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()
+     WHERE NOT EXISTS (SELECT 1 FROM workspace.hgv_comp.dim_rep_filter_config WHERE config_id = 'RF-EXCLUDE-001')`,
+
+    `INSERT INTO workspace.hgv_comp.dim_rep_filter_config
+      (config_id, filter_type, filter_value, filter_parameters, is_active, effective_date, end_date, rule_description, modified_by, modified_at, created_at)
+     SELECT 'RF-EXCLUDE-002', 'exclude_pattern', 'TBD', NULL, FALSE, DATE '2026-01-01', NULL,
+       'Exclude reps with name containing TBD (currently disabled)', 'system', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()
+     WHERE NOT EXISTS (SELECT 1 FROM workspace.hgv_comp.dim_rep_filter_config WHERE config_id = 'RF-EXCLUDE-002')`,
+  ];
+
+  for (const stmt of repFilterSeeds) {
+    try {
+      await runSql(stmt);
+    } catch (err) {
+      console.warn('Rep filter seed skipped:', err instanceof Error ? err.message : err);
+    }
+  }
+
+  console.info('[Comp Config] Default compensation configuration seeded successfully.');
 }

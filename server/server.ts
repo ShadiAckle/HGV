@@ -22,6 +22,20 @@ import { searchCompMentions } from './mentionsSearch.js';
 import { mountMcpHttp } from './mcp/mountMcpHttp.js';
 import { mountResponsesAgent } from './responsesAgent.js';
 import { isProductionCompDataMode, rewriteCompCatalogSql } from '../shared/compCatalog.js';
+import {
+  fetchTourStatusConfigs,
+  createTourStatusConfig,
+  updateTourStatusConfig,
+  deleteTourStatusConfig,
+  fetchCompRuleConfigs,
+  createCompRuleConfig,
+  updateCompRuleConfig,
+  deleteCompRuleConfig,
+  fetchRepFilterConfigs,
+  createRepFilterConfig,
+  updateRepFilterConfig,
+  deleteRepFilterConfig,
+} from './compConfigApi.js';
 import { ensureCompExtensionsOnce, waitForBootstrap } from './compSchemaBootstrap.js';
 import {
   fetchActiveInterventions,
@@ -2003,6 +2017,28 @@ appkit.server.extend((app) => {
       res.json({ ok: false, valid: false, error: message });
     }
   });
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Compensation Configuration API (Admin Self-Service Rules)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  // Tour Status Config
+  app.get('/api/admin/tour-status-config', (req, res) => fetchTourStatusConfigs(runSql, req, res));
+  app.post('/api/admin/tour-status-config', (req, res) => createTourStatusConfig(runSql, req, res));
+  app.put('/api/admin/tour-status-config/:config_id', (req, res) => updateTourStatusConfig(runSql, req, res));
+  app.delete('/api/admin/tour-status-config/:config_id', (req, res) => deleteTourStatusConfig(runSql, req, res));
+
+  // Comp Rule Config
+  app.get('/api/admin/comp-rule-config', (req, res) => fetchCompRuleConfigs(runSql, req, res));
+  app.post('/api/admin/comp-rule-config', (req, res) => createCompRuleConfig(runSql, req, res));
+  app.put('/api/admin/comp-rule-config/:config_id', (req, res) => updateCompRuleConfig(runSql, req, res));
+  app.delete('/api/admin/comp-rule-config/:config_id', (req, res) => deleteCompRuleConfig(runSql, req, res));
+
+  // Rep Filter Config
+  app.get('/api/admin/rep-filter-config', (req, res) => fetchRepFilterConfigs(runSql, req, res));
+  app.post('/api/admin/rep-filter-config', (req, res) => createRepFilterConfig(runSql, req, res));
+  app.put('/api/admin/rep-filter-config/:config_id', (req, res) => updateRepFilterConfig(runSql, req, res));
+  app.delete('/api/admin/rep-filter-config/:config_id', (req, res) => deleteRepFilterConfig(runSql, req, res));
 
   app.delete('/api/comp/scenarios/:id', async (req, res) => {
     const id = req.params.id;

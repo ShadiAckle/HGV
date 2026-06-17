@@ -131,11 +131,12 @@ WHERE p.opc_person_1_employee_id IS NOT NULL
   AND CAST(p.opc_person_1_employee_id AS BIGINT) <> 0;
 
 -- ---------------------------------------------------------------------------
--- Step 3) fact_marketing_tour_payout (CORRECTED WITH ACTUAL STATUS VALUES)
+-- Step 3) fact_marketing_tour_payout (DYNAMIC CONFIG-DRIVEN PAYOUTS)
 -- ---------------------------------------------------------------------------
+-- **FIX #3: Read payout amounts from dim_tour_status_config (admin self-service)**
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.fact_marketing_tour_payout
 USING DELTA
-COMMENT 'Tour-grain payout fact with ACTUAL live status values from April 2026 data'
+COMMENT 'Tour-grain payout fact with CONFIGURABLE status-driven payouts'
 AS
 SELECT
   t.tour_id,
@@ -151,25 +152,9 @@ SELECT
   t.txn_count,
   t.detail_row_count,  -- For debugging duplication issues
   
-  -- **FIX #2: Use ACTUAL status values from live data**
-  CASE
-    -- Qualified tour (guest attended and completed presentation) - 34.47% of tours
-    WHEN UPPER(TRIM(t.tour_status_desc)) = 'SHOW' THEN 75.00
-    
-    -- Courtesy tour (guest showed but no full presentation) - 0.47% of tours
-    WHEN UPPER(TRIM(t.tour_status_desc)) = 'SHOW - NO TOUR' THEN 20.00
-    
-    -- No show or cancelled (no payout) - 15.55% + 2.17% of tours
-    WHEN UPPER(TRIM(t.tour_status_desc)) IN ('NO SHOW', 'CANCELLED', 'CANCELED') THEN 0.00
-    
-    -- BOOKED status (11.77%) - tour scheduled but not yet occurred
-    -- Treat as no payout yet (will pay when tour happens)
-    WHEN UPPER(TRIM(t.tour_status_desc)) IN ('BOOKED', 'BOOK') THEN 0.00
-    
-    -- Other statuses (TOUR, Transferred to Voice, APT, etc.) - treat as courtesy
-    -- This is conservative; may need HGV clarification on these
-    ELSE 20.00
-  END AS payout,
+  -- **DYNAMIC PAYOUT**: Read from config table (admin can adjust without SQL changes)
+  -- NULL status stored as '__NULL__' in config table for SQL join compatibility
+  COALESCE(cfg.payout_amount, 0.00) AS payout,
   
   -- **FPS POTENTIAL**: Based on contract qualified flag (detail.qualified = 1)
   CASE
@@ -178,7 +163,11 @@ SELECT
   END AS fps_potential,
   
   CURRENT_TIMESTAMP() AS _loaded_at
-FROM edw_dev_hris.hgv_comp._stg_tour_enriched t;
+FROM edw_dev_hris.hgv_comp._stg_tour_enriched t
+LEFT JOIN edw_dev_hris.hgv_comp.dim_tour_status_config cfg
+  ON COALESCE(t.tour_status_desc, '__NULL__') = COALESCE(cfg.tour_status_desc, '__NULL__')
+  AND cfg.is_active = TRUE
+  AND CURRENT_DATE() BETWEEN cfg.effective_date AND COALESCE(cfg.end_date, DATE '2099-12-31');
 
 -- ---------------------------------------------------------------------------
 -- Step 4) dim_marketing_rep (from payout only, no Cognos join)
