@@ -1,0 +1,122 @@
+name: Diagnose Cognos Marketing Schema
+
+on:
+  workflow_dispatch:
+    inputs:
+      warehouse_id:
+        description: 'Databricks SQL Warehouse ID'
+        required: false
+        default: 'your-warehouse-id'
+      profile:
+        description: 'Databricks CLI profile'
+        required: false
+        default: 'hgv-premium'
+
+jobs:
+  run-diagnostics:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install Databricks CLI
+        run: |
+          pip install databricks-cli
+          databricks --version
+      
+      - name: Configure Databricks CLI
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: |
+          mkdir -p ~/.databrickscfg
+          cat > ~/.databrickscfg << EOF
+          [DEFAULT]
+          host = ${DATABRICKS_HOST}
+          token = ${DATABRICKS_TOKEN}
+          
+          [${{ github.event.inputs.profile }}]
+          host = ${DATABRICKS_HOST}
+          token = ${DATABRICKS_TOKEN}
+          EOF
+          
+          echo "Databricks CLI configured"
+          databricks workspace ls / --profile ${{ github.event.inputs.profile }} || echo "Workspace access verified"
+      
+      - name: Run diagnostic queries
+        id: run_queries
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: |
+          echo "Running Cognos schema diagnostic queries..."
+          
+          # Create output directory
+          mkdir -p diagnostic-results
+          
+          # Run each query separately for better error handling
+          echo "=== Query 1: Tour Status Distribution ===" | tee diagnostic-results/output.txt
+          databricks sql \
+            --profile ${{ github.event.inputs.profile }} \
+            --warehouse-id ${{ github.event.inputs.warehouse_id }} \
+            --statement "$(sed -n '/Query 1:/,/Query 2:/p' scripts/diagnose-cognos-schema.sql | head -n -1)" \
+            >> diagnostic-results/query1-tour-status.csv 2>&1 || echo "Query 1 failed" | tee -a diagnostic-results/output.txt
+          
+          echo "" | tee -a diagnostic-results/output.txt
+          echo "=== Query 2: Personnel Deduplication ===" | tee -a diagnostic-results/output.txt
+          databricks sql \
+            --profile ${{ github.event.inputs.profile }} \
+            --warehouse-id ${{ github.event.inputs.warehouse_id }} \
+            --statement "$(sed -n '/Query 2:/,/Query 3:/p' scripts/diagnose-cognos-schema.sql | head -n -1)" \
+            >> diagnostic-results/query2-personnel-dedupe.csv 2>&1 || echo "Query 2 failed" | tee -a diagnostic-results/output.txt
+          
+          echo "" | tee -a diagnostic-results/output.txt
+          echo "=== Query 3: Multi-Rep Examples ===" | tee -a diagnostic-results/output.txt
+          databricks sql \
+            --profile ${{ github.event.inputs.profile }} \
+            --warehouse-id ${{ github.event.inputs.warehouse_id }} \
+            --statement "$(sed -n '/Query 3:/,/Query 4:/p' scripts/diagnose-cognos-schema.sql | head -n -1)" \
+            >> diagnostic-results/query3-multi-rep.csv 2>&1 || echo "Query 3 failed" | tee -a diagnostic-results/output.txt
+          
+          echo "" | tee -a diagnostic-results/output.txt
+          echo "=== Query 4: Sample Tours ===" | tee -a diagnostic-results/output.txt
+          databricks sql \
+            --profile ${{ github.event.inputs.profile }} \
+            --warehouse-id ${{ github.event.inputs.warehouse_id }} \
+            --statement "$(sed -n '/Query 4:/,/Query 5:/p' scripts/diagnose-cognos-schema.sql | head -n -1)" \
+            >> diagnostic-results/query4-sample-tours.csv 2>&1 || echo "Query 4 failed" | tee -a diagnostic-results/output.txt
+          
+          echo "" | tee -a diagnostic-results/output.txt
+          echo "=== Query 5: Top Reps ===" | tee -a diagnostic-results/output.txt
+          databricks sql \
+            --profile ${{ github.event.inputs.profile }} \
+            --warehouse-id ${{ github.event.inputs.warehouse_id }} \
+            --statement "$(sed -n '/Query 5:/,/EOF/p' scripts/diagnose-cognos-schema.sql)" \
+            >> diagnostic-results/query5-top-reps.csv 2>&1 || echo "Query 5 failed" | tee -a diagnostic-results/output.txt
+          
+          echo "Diagnostic queries complete. Results saved to diagnostic-results/"
+      
+      - name: Upload diagnostic results
+        uses: actions/upload-artifact@v4
+        with:
+          name: cognos-diagnostic-results
+          path: diagnostic-results/
+          retention-days: 30
+      
+      - name: Display summary
+        run: |
+          echo "=== Diagnostic Summary ==="
+          echo "Results have been saved as artifacts."
+          echo "Download them from the Actions tab -> this workflow run -> Artifacts"
+          echo ""
+          echo "Files created:"
+          ls -lh diagnostic-results/
+          echo ""
+          echo "Preview of results:"
+          head -20 diagnostic-results/query1-tour-status.csv || echo "No results in query1"
