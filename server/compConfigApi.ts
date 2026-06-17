@@ -34,12 +34,12 @@ export async function fetchTourStatusConfigs(runSql: RunSql, _req: Request, res:
         CASE WHEN tour_status_desc = '__NULL__' THEN NULL ELSE tour_status_desc END as tour_status_desc,
         payout_amount,
         is_active,
-        CAST(effective_date AS STRING) as effective_date,
-        CAST(end_date AS STRING) as end_date,
-        rule_description,
-        modified_by,
-        CAST(modified_at AS STRING) as modified_at,
-        CAST(created_at AS STRING) as created_at
+        CAST(effective_start_date AS STRING) as effective_start_date,
+        CAST(effective_end_date AS STRING) as effective_end_date,
+        CAST(created_at AS STRING) as created_at,
+        created_by,
+        CAST(updated_at AS STRING) as updated_at,
+        updated_by
       FROM workspace.hgv_comp.dim_tour_status_config
       ORDER BY 
         is_active DESC,
@@ -64,24 +64,22 @@ export async function createTourStatusConfig(runSql: RunSql, req: Request, res: 
 
     const sql = rewriteCompCatalogSql(`
       INSERT INTO workspace.hgv_comp.dim_tour_status_config
-        (config_id, tour_status_desc, payout_amount, is_active, effective_date, end_date, 
-         rule_description, modified_by, modified_at, created_at)
+        (config_id, tour_status_desc, payout_amount, is_active, effective_start_date, effective_end_date, 
+         created_at, created_by)
       VALUES (
         '${configId}',
         ${statusForSql === '__NULL__' ? "'__NULL__'" : `'${statusForSql.replace(/'/g, "''")}'`},
         ${input.payout_amount},
         ${input.is_active ?? true},
-        DATE '${input.effective_date}',
-        ${input.end_date ? `DATE '${input.end_date}'` : 'NULL'},
-        ${input.rule_description ? `'${input.rule_description.replace(/'/g, "''")}'` : 'NULL'},
-        '${input.modified_by.replace(/'/g, "''")}',
+        DATE '${input.effective_start_date}',
+        ${input.effective_end_date ? `DATE '${input.effective_end_date}'` : 'NULL'},
         TIMESTAMP '${now}',
-        TIMESTAMP '${now}'
+        '${input.created_by.replace(/'/g, "''")}'
       )
     `);
 
     await runSql(sql);
-    await logConfigAudit(runSql, 'dim_tour_status_config', configId, 'INSERT', null, JSON.stringify(input), input.modified_by);
+    await logConfigAudit(runSql, 'dim_tour_status_config', configId, 'INSERT', null, JSON.stringify(input), input.created_by);
 
     res.json({ success: true, config_id: configId });
   } catch (err) {
@@ -110,16 +108,15 @@ export async function updateTourStatusConfig(runSql: RunSql, req: Request, res: 
         tour_status_desc = ${statusForSql === '__NULL__' ? "'__NULL__'" : `'${statusForSql.replace(/'/g, "''")}'`},
         payout_amount = ${input.payout_amount},
         is_active = ${input.is_active ?? true},
-        effective_date = DATE '${input.effective_date}',
-        end_date = ${input.end_date ? `DATE '${input.end_date}'` : 'NULL'},
-        rule_description = ${input.rule_description ? `'${input.rule_description.replace(/'/g, "''")}'` : 'NULL'},
-        modified_by = '${input.modified_by.replace(/'/g, "''")}',
-        modified_at = TIMESTAMP '${now}'
+        effective_start_date = DATE '${input.effective_start_date}',
+        effective_end_date = ${input.effective_end_date ? `DATE '${input.effective_end_date}'` : 'NULL'},
+        updated_at = TIMESTAMP '${now}',
+        updated_by = '${input.created_by.replace(/'/g, "''")}'
       WHERE config_id = '${configId}'
     `);
 
     await runSql(sql);
-    await logConfigAudit(runSql, 'dim_tour_status_config', configId, 'UPDATE', oldValue, JSON.stringify(input), input.modified_by);
+    await logConfigAudit(runSql, 'dim_tour_status_config', configId, 'UPDATE', oldValue, JSON.stringify(input), input.created_by);
 
     res.json({ success: true });
   } catch (err) {
@@ -131,7 +128,7 @@ export async function updateTourStatusConfig(runSql: RunSql, req: Request, res: 
 export async function deleteTourStatusConfig(runSql: RunSql, req: Request, res: Response): Promise<void> {
   try {
     const configId = String(req.params.config_id);
-    const { modified_by } = req.body;
+    const { created_by } = req.body;
 
     const oldRows = await runSql(rewriteCompCatalogSql(`
       SELECT * FROM workspace.hgv_comp.dim_tour_status_config WHERE config_id = '${configId}'
@@ -143,7 +140,7 @@ export async function deleteTourStatusConfig(runSql: RunSql, req: Request, res: 
     `);
 
     await runSql(sql);
-    await logConfigAudit(runSql, 'dim_tour_status_config', configId, 'DELETE', oldValue, null, modified_by);
+    await logConfigAudit(runSql, 'dim_tour_status_config', configId, 'DELETE', oldValue, null, created_by);
 
     res.json({ success: true });
   } catch (err) {
@@ -160,12 +157,13 @@ export async function fetchCompRuleConfigs(runSql: RunSql, _req: Request, res: R
   try {
     const sql = rewriteCompCatalogSql(`
       SELECT 
-        config_id, rule_name, rule_value, rule_parameters, is_active,
-        CAST(effective_date AS STRING) as effective_date,
-        CAST(end_date AS STRING) as end_date,
-        rule_description, modified_by,
-        CAST(modified_at AS STRING) as modified_at,
-        CAST(created_at AS STRING) as created_at
+        config_id, rule_name, rule_value, rule_description, is_active,
+        CAST(effective_start_date AS STRING) as effective_start_date,
+        CAST(effective_end_date AS STRING) as effective_end_date,
+        CAST(created_at AS STRING) as created_at,
+        created_by,
+        CAST(updated_at AS STRING) as updated_at,
+        updated_by
       FROM workspace.hgv_comp.dim_comp_rule_config
       ORDER BY is_active DESC, rule_name
     `);
@@ -185,25 +183,23 @@ export async function createCompRuleConfig(runSql: RunSql, req: Request, res: Re
 
     const sql = rewriteCompCatalogSql(`
       INSERT INTO workspace.hgv_comp.dim_comp_rule_config
-        (config_id, rule_name, rule_value, rule_parameters, is_active, effective_date, end_date,
-         rule_description, modified_by, modified_at, created_at)
+        (config_id, rule_name, rule_value, rule_description, is_active, effective_start_date, effective_end_date,
+         created_at, created_by)
       VALUES (
         '${configId}',
         '${input.rule_name.replace(/'/g, "''")}',
         '${input.rule_value.replace(/'/g, "''")}',
-        ${input.rule_parameters ? `'${input.rule_parameters.replace(/'/g, "''")}'` : 'NULL'},
-        ${input.is_active ?? true},
-        DATE '${input.effective_date}',
-        ${input.end_date ? `DATE '${input.end_date}'` : 'NULL'},
         ${input.rule_description ? `'${input.rule_description.replace(/'/g, "''")}'` : 'NULL'},
-        '${input.modified_by.replace(/'/g, "''")}',
+        ${input.is_active ?? true},
+        DATE '${input.effective_start_date}',
+        ${input.effective_end_date ? `DATE '${input.effective_end_date}'` : 'NULL'},
         TIMESTAMP '${now}',
-        TIMESTAMP '${now}'
+        '${input.created_by.replace(/'/g, "''")}'
       )
     `);
 
     await runSql(sql);
-    await logConfigAudit(runSql, 'dim_comp_rule_config', configId, 'INSERT', null, JSON.stringify(input), input.modified_by);
+    await logConfigAudit(runSql, 'dim_comp_rule_config', configId, 'INSERT', null, JSON.stringify(input), input.created_by);
 
     res.json({ success: true, config_id: configId });
   } catch (err) {
@@ -228,18 +224,17 @@ export async function updateCompRuleConfig(runSql: RunSql, req: Request, res: Re
       SET 
         rule_name = '${input.rule_name.replace(/'/g, "''")}',
         rule_value = '${input.rule_value.replace(/'/g, "''")}',
-        rule_parameters = ${input.rule_parameters ? `'${input.rule_parameters.replace(/'/g, "''")}'` : 'NULL'},
-        is_active = ${input.is_active ?? true},
-        effective_date = DATE '${input.effective_date}',
-        end_date = ${input.end_date ? `DATE '${input.end_date}'` : 'NULL'},
         rule_description = ${input.rule_description ? `'${input.rule_description.replace(/'/g, "''")}'` : 'NULL'},
-        modified_by = '${input.modified_by.replace(/'/g, "''")}',
-        modified_at = TIMESTAMP '${now}'
+        is_active = ${input.is_active ?? true},
+        effective_start_date = DATE '${input.effective_start_date}',
+        effective_end_date = ${input.effective_end_date ? `DATE '${input.effective_end_date}'` : 'NULL'},
+        updated_at = TIMESTAMP '${now}',
+        updated_by = '${input.created_by.replace(/'/g, "''")}'
       WHERE config_id = '${configId}'
     `);
 
     await runSql(sql);
-    await logConfigAudit(runSql, 'dim_comp_rule_config', configId, 'UPDATE', oldValue, JSON.stringify(input), input.modified_by);
+    await logConfigAudit(runSql, 'dim_comp_rule_config', configId, 'UPDATE', oldValue, JSON.stringify(input), input.created_by);
 
     res.json({ success: true });
   } catch (err) {
@@ -251,7 +246,7 @@ export async function updateCompRuleConfig(runSql: RunSql, req: Request, res: Re
 export async function deleteCompRuleConfig(runSql: RunSql, req: Request, res: Response): Promise<void> {
   try {
     const configId = String(req.params.config_id);
-    const { modified_by } = req.body;
+    const { created_by } = req.body;
 
     const oldRows = await runSql(rewriteCompCatalogSql(`
       SELECT * FROM workspace.hgv_comp.dim_comp_rule_config WHERE config_id = '${configId}'
@@ -263,7 +258,7 @@ export async function deleteCompRuleConfig(runSql: RunSql, req: Request, res: Re
     `);
 
     await runSql(sql);
-    await logConfigAudit(runSql, 'dim_comp_rule_config', configId, 'DELETE', oldValue, null, modified_by);
+    await logConfigAudit(runSql, 'dim_comp_rule_config', configId, 'DELETE', oldValue, null, created_by);
 
     res.json({ success: true });
   } catch (err) {
@@ -280,12 +275,13 @@ export async function fetchRepFilterConfigs(runSql: RunSql, _req: Request, res: 
   try {
     const sql = rewriteCompCatalogSql(`
       SELECT 
-        config_id, filter_type, filter_value, filter_parameters, is_active,
-        CAST(effective_date AS STRING) as effective_date,
-        CAST(end_date AS STRING) as end_date,
-        rule_description, modified_by,
-        CAST(modified_at AS STRING) as modified_at,
-        CAST(created_at AS STRING) as created_at
+        config_id, filter_name, filter_type, filter_value, is_active,
+        CAST(effective_start_date AS STRING) as effective_start_date,
+        CAST(effective_end_date AS STRING) as effective_end_date,
+        CAST(created_at AS STRING) as created_at,
+        created_by,
+        CAST(updated_at AS STRING) as updated_at,
+        updated_by
       FROM workspace.hgv_comp.dim_rep_filter_config
       ORDER BY is_active DESC, filter_type, filter_value
     `);
@@ -305,25 +301,23 @@ export async function createRepFilterConfig(runSql: RunSql, req: Request, res: R
 
     const sql = rewriteCompCatalogSql(`
       INSERT INTO workspace.hgv_comp.dim_rep_filter_config
-        (config_id, filter_type, filter_value, filter_parameters, is_active, effective_date, end_date,
-         rule_description, modified_by, modified_at, created_at)
+        (config_id, filter_name, filter_type, filter_value, is_active, effective_start_date, effective_end_date,
+         created_at, created_by)
       VALUES (
         '${configId}',
+        '${input.filter_name.replace(/'/g, "''")}',
         '${input.filter_type.replace(/'/g, "''")}',
         '${input.filter_value.replace(/'/g, "''")}',
-        ${input.filter_parameters ? `'${input.filter_parameters.replace(/'/g, "''")}'` : 'NULL'},
         ${input.is_active ?? true},
-        DATE '${input.effective_date}',
-        ${input.end_date ? `DATE '${input.end_date}'` : 'NULL'},
-        ${input.rule_description ? `'${input.rule_description.replace(/'/g, "''")}'` : 'NULL'},
-        '${input.modified_by.replace(/'/g, "''")}',
+        DATE '${input.effective_start_date}',
+        ${input.effective_end_date ? `DATE '${input.effective_end_date}'` : 'NULL'},
         TIMESTAMP '${now}',
-        TIMESTAMP '${now}'
+        '${input.created_by.replace(/'/g, "''")}'
       )
     `);
 
     await runSql(sql);
-    await logConfigAudit(runSql, 'dim_rep_filter_config', configId, 'INSERT', null, JSON.stringify(input), input.modified_by);
+    await logConfigAudit(runSql, 'dim_rep_filter_config', configId, 'INSERT', null, JSON.stringify(input), input.created_by);
 
     res.json({ success: true, config_id: configId });
   } catch (err) {
@@ -346,20 +340,19 @@ export async function updateRepFilterConfig(runSql: RunSql, req: Request, res: R
     const sql = rewriteCompCatalogSql(`
       UPDATE workspace.hgv_comp.dim_rep_filter_config
       SET 
+        filter_name = '${input.filter_name.replace(/'/g, "''")}',
         filter_type = '${input.filter_type.replace(/'/g, "''")}',
         filter_value = '${input.filter_value.replace(/'/g, "''")}',
-        filter_parameters = ${input.filter_parameters ? `'${input.filter_parameters.replace(/'/g, "''")}'` : 'NULL'},
         is_active = ${input.is_active ?? true},
-        effective_date = DATE '${input.effective_date}',
-        end_date = ${input.end_date ? `DATE '${input.end_date}'` : 'NULL'},
-        rule_description = ${input.rule_description ? `'${input.rule_description.replace(/'/g, "''")}'` : 'NULL'},
-        modified_by = '${input.modified_by.replace(/'/g, "''")}',
-        modified_at = TIMESTAMP '${now}'
+        effective_start_date = DATE '${input.effective_start_date}',
+        effective_end_date = ${input.effective_end_date ? `DATE '${input.effective_end_date}'` : 'NULL'},
+        updated_at = TIMESTAMP '${now}',
+        updated_by = '${input.created_by.replace(/'/g, "''")}'
       WHERE config_id = '${configId}'
     `);
 
     await runSql(sql);
-    await logConfigAudit(runSql, 'dim_rep_filter_config', configId, 'UPDATE', oldValue, JSON.stringify(input), input.modified_by);
+    await logConfigAudit(runSql, 'dim_rep_filter_config', configId, 'UPDATE', oldValue, JSON.stringify(input), input.created_by);
 
     res.json({ success: true });
   } catch (err) {
@@ -371,7 +364,7 @@ export async function updateRepFilterConfig(runSql: RunSql, req: Request, res: R
 export async function deleteRepFilterConfig(runSql: RunSql, req: Request, res: Response): Promise<void> {
   try {
     const configId = String(req.params.config_id);
-    const { modified_by } = req.body;
+    const { created_by } = req.body;
 
     const oldRows = await runSql(rewriteCompCatalogSql(`
       SELECT * FROM workspace.hgv_comp.dim_rep_filter_config WHERE config_id = '${configId}'
@@ -383,7 +376,7 @@ export async function deleteRepFilterConfig(runSql: RunSql, req: Request, res: R
     `);
 
     await runSql(sql);
-    await logConfigAudit(runSql, 'dim_rep_filter_config', configId, 'DELETE', oldValue, null, modified_by);
+    await logConfigAudit(runSql, 'dim_rep_filter_config', configId, 'DELETE', oldValue, null, created_by);
 
     res.json({ success: true });
   } catch (err) {
@@ -400,10 +393,10 @@ async function logConfigAudit(
   runSql: RunSql,
   configTable: string,
   configId: string,
-  actionType: CompConfigAuditLog['action_type'],
+  action: CompConfigAuditLog['action'],
   oldValue: string | null,
   newValue: string | null,
-  modifiedBy: string
+  changedBy: string
 ): Promise<void> {
   try {
     const auditId = `AUDIT-${randomUUID()}`;
@@ -411,18 +404,16 @@ async function logConfigAudit(
 
     const sql = rewriteCompCatalogSql(`
       INSERT INTO workspace.hgv_comp.fact_comp_config_audit_log
-        (audit_id, config_table, config_id, action_type, old_value, new_value, modified_by, modified_at, client_ip, user_agent)
+        (audit_id, config_table, config_id, action, changed_by, changed_at, old_value, new_value)
       VALUES (
         '${auditId}',
         '${configTable}',
         '${configId}',
-        '${actionType}',
-        ${oldValue ? `'${oldValue.replace(/'/g, "''")}'` : 'NULL'},
-        ${newValue ? `'${newValue.replace(/'/g, "''")}'` : 'NULL'},
-        '${modifiedBy.replace(/'/g, "''")}',
+        '${action}',
+        '${changedBy.replace(/'/g, "''")}',
         TIMESTAMP '${now}',
-        NULL,
-        NULL
+        ${oldValue ? `'${oldValue.replace(/'/g, "''")}'` : 'NULL'},
+        ${newValue ? `'${newValue.replace(/'/g, "''")}'` : 'NULL'}
       )
     `);
 
