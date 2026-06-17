@@ -14,22 +14,21 @@ export interface TourStatusConfig {
   tour_status_desc: string | null;  // NULL represented as null in TypeScript
   payout_amount: number;
   is_active: boolean;
-  effective_date: string;  // ISO date string
-  end_date: string | null;
-  rule_description: string | null;
-  modified_by: string;
-  modified_at: string;  // ISO timestamp
+  effective_start_date: string;  // ISO date string
+  effective_end_date: string | null;
   created_at: string;
+  created_by: string;
+  updated_at: string | null;  // ISO timestamp
+  updated_by: string | null;
 }
 
 export interface TourStatusConfigInput {
   tour_status_desc: string | null;
   payout_amount: number;
   is_active?: boolean;
-  effective_date: string;
-  end_date?: string | null;
-  rule_description?: string;
-  modified_by: string;
+  effective_start_date: string;
+  effective_end_date?: string | null;
+  created_by: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -40,25 +39,24 @@ export interface CompRuleConfig {
   config_id: string;
   rule_name: string;
   rule_value: string;
-  rule_parameters: string | null;  // JSON string
-  is_active: boolean;
-  effective_date: string;
-  end_date: string | null;
   rule_description: string | null;
-  modified_by: string;
-  modified_at: string;
+  is_active: boolean;
+  effective_start_date: string;
+  effective_end_date: string | null;
   created_at: string;
+  created_by: string;
+  updated_at: string | null;
+  updated_by: string | null;
 }
 
 export interface CompRuleConfigInput {
   rule_name: string;
   rule_value: string;
-  rule_parameters?: string | null;
+  rule_description?: string | null;
   is_active?: boolean;
-  effective_date: string;
-  end_date?: string | null;
-  rule_description?: string;
-  modified_by: string;
+  effective_start_date: string;
+  effective_end_date?: string | null;
+  created_by: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -67,27 +65,26 @@ export interface CompRuleConfigInput {
 
 export interface RepFilterConfig {
   config_id: string;
+  filter_name: string;
   filter_type: string;
   filter_value: string;
-  filter_parameters: string | null;  // JSON string
   is_active: boolean;
-  effective_date: string;
-  end_date: string | null;
-  rule_description: string | null;
-  modified_by: string;
-  modified_at: string;
+  effective_start_date: string;
+  effective_end_date: string | null;
   created_at: string;
+  created_by: string;
+  updated_at: string | null;
+  updated_by: string | null;
 }
 
 export interface RepFilterConfigInput {
+  filter_name: string;
   filter_type: string;
   filter_value: string;
-  filter_parameters?: string | null;
   is_active?: boolean;
-  effective_date: string;
-  end_date?: string | null;
-  rule_description?: string;
-  modified_by: string;
+  effective_start_date: string;
+  effective_end_date?: string | null;
+  created_by: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -98,13 +95,11 @@ export interface CompConfigAuditLog {
   audit_id: string;
   config_table: string;
   config_id: string;
-  action_type: 'INSERT' | 'UPDATE' | 'DELETE' | 'ACTIVATE' | 'DEACTIVATE';
+  action: 'INSERT' | 'UPDATE' | 'DELETE';
+  changed_by: string;
+  changed_at: string;
   old_value: string | null;  // JSON snapshot
   new_value: string | null;  // JSON snapshot
-  modified_by: string;
-  modified_at: string;
-  client_ip: string | null;
-  user_agent: string | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

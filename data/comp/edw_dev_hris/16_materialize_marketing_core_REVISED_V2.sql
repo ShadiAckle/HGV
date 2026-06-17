@@ -167,7 +167,7 @@ FROM edw_dev_hris.hgv_comp._stg_tour_enriched t
 LEFT JOIN edw_dev_hris.hgv_comp.dim_tour_status_config cfg
   ON COALESCE(t.tour_status_desc, '__NULL__') = COALESCE(cfg.tour_status_desc, '__NULL__')
   AND cfg.is_active = TRUE
-  AND CURRENT_DATE() BETWEEN cfg.effective_date AND COALESCE(cfg.end_date, DATE '2099-12-31');
+  AND CURRENT_DATE() BETWEEN cfg.effective_start_date AND COALESCE(cfg.effective_end_date, DATE '2099-12-31');
 
 -- ---------------------------------------------------------------------------
 -- Step 4) dim_marketing_rep (from payout only, no Cognos join)
