@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS dim_tour_status_config (
   config_id             STRING NOT NULL,  -- UUID primary key
   tour_status_desc      STRING,           -- Status value from it_smt_marketing (NULL → '__NULL__')
   payout_amount         DECIMAL(10, 2) NOT NULL,
-  is_active             BOOLEAN NOT NULL DEFAULT TRUE,
+  is_active             BOOLEAN NOT NULL,
   effective_date        DATE NOT NULL,
   end_date              DATE,             -- NULL = open-ended
   rule_description      STRING,           -- Human-readable explanation
@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS dim_comp_rule_config (
   rule_name             STRING NOT NULL,  -- e.g., 'multi_rep_credit_policy'
   rule_value            STRING NOT NULL,  -- e.g., 'first_rep_only', 'split_credit', 'all_reps'
   rule_parameters       STRING,           -- JSON for complex rules (e.g., {"split_percentage": 50})
-  is_active             BOOLEAN NOT NULL DEFAULT TRUE,
+  is_active             BOOLEAN NOT NULL,
   effective_date        DATE NOT NULL,
   end_date              DATE,
   rule_description      STRING,
@@ -64,7 +64,7 @@ CREATE TABLE IF NOT EXISTS dim_rep_filter_config (
   filter_type           STRING NOT NULL,  -- 'exclude_pattern', 'min_tour_count', 'site_filter', etc.
   filter_value          STRING NOT NULL,  -- Pattern/threshold value
   filter_parameters     STRING,           -- JSON for complex filters
-  is_active             BOOLEAN NOT NULL DEFAULT TRUE,
+  is_active             BOOLEAN NOT NULL,
   effective_date        DATE NOT NULL,
   end_date              DATE,
   rule_description      STRING,
