@@ -86,10 +86,10 @@ CREATE TABLE edw_dev_hris.hgv_comp.fact_marketing_chargeback (
   chargeback_id STRING NOT NULL,
   rep_id STRING NOT NULL,
   tour_id STRING,
+  period_id STRING NOT NULL,
   chargeback_date DATE NOT NULL,
   chargeback_amount DECIMAL(10,2) NOT NULL,
   chargeback_reason STRING,
-  period_id STRING NOT NULL,
   reversed_date DATE,
   is_active BOOLEAN NOT NULL
 ) USING DELTA;

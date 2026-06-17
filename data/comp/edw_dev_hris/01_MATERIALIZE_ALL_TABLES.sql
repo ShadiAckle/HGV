@@ -137,23 +137,27 @@ LEFT JOIN edw_dev_hris.hgv_comp.dim_tour_status_config cfg
   AND CURRENT_DATE() BETWEEN cfg.effective_start_date AND COALESCE(cfg.effective_end_date, DATE '2099-12-31');
 
 -- ---------------------------------------------------------------------------
--- Step 4) dim_marketing_rep
+-- Step 4) dim_marketing_rep (with rep_id alias for app compatibility)
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.dim_marketing_rep
 USING DELTA
 COMMENT 'Marketing rep dimension'
 AS
 SELECT DISTINCT
-  rep_employee_id,
+  rep_employee_id AS rep_id,
   rep_name,
-  rep_team_code,
+  rep_team_code AS team_id,
+  CAST(NULL AS STRING) AS level_code,
+  CAST(NULL AS STRING) AS manager_rep_id,
+  CAST(NULL AS STRING) AS region,
+  TRUE AS is_active,
   CURRENT_TIMESTAMP() AS _loaded_at
 FROM edw_dev_hris.hgv_comp.fact_marketing_tour_payout
 WHERE rep_employee_id IS NOT NULL
 ORDER BY rep_name;
 
 -- ---------------------------------------------------------------------------
--- Step 5) fact_marketing_rep_period
+-- Step 5) fact_marketing_rep_period (with rep_id/period_id for app compatibility)
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.fact_marketing_rep_period
 USING DELTA
@@ -173,10 +177,11 @@ WITH rep_period AS (
   GROUP BY rep_employee_id, rep_name, rep_team_code, DATE_TRUNC('quarter', tour_date)
 )
 SELECT
-  rep_employee_id,
+  rep_employee_id AS rep_id,
   rep_name,
-  rep_team_code,
-  period_start,
+  rep_team_code AS team_id,
+  CONCAT('Q', QUARTER(period_start), '-', YEAR(period_start)) AS period_id,
+  period_start AS period_label,
   tours,
   tours_paid,
   CAST(total_payout AS DECIMAL(18, 2)) AS total_payout,
@@ -186,47 +191,51 @@ SELECT
 FROM rep_period;
 
 -- ---------------------------------------------------------------------------
--- Step 6) dim_period
+-- Step 6) dim_period (with period_id for app compatibility)
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.dim_period
 USING DELTA
 COMMENT 'Period dimension (quarters)'
 AS
 SELECT
-  period_start,
-  YEAR(period_start) AS period_year,
-  QUARTER(period_start) AS period_quarter,
-  CONCAT('Q', QUARTER(period_start), ' ', YEAR(period_start)) AS period_label,
+  period_id,
+  period_label,
+  YEAR(TO_DATE(period_label)) AS period_year,
+  QUARTER(TO_DATE(period_label)) AS period_quarter,
+  TO_DATE(period_label) AS period_start,
   CURRENT_TIMESTAMP() AS _loaded_at
 FROM (
-  SELECT DISTINCT period_start
+  SELECT DISTINCT period_id, period_label
   FROM edw_dev_hris.hgv_comp.fact_marketing_rep_period
 );
 
 -- ---------------------------------------------------------------------------
--- Step 7) dim_rep (union of marketing + sales)
+-- Step 7) dim_rep (union of marketing + sales, app schema compatible)
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.dim_rep
 USING DELTA
 COMMENT 'Unified rep dimension (marketing + sales)'
 AS
 SELECT
-  rep_employee_id AS employee_id,
-  rep_name AS name,
-  'Marketing' AS role,
-  rep_team_code AS team_code,
+  rep_id,
+  rep_name,
+  level_code,
+  team_id,
+  manager_rep_id,
+  region,
+  is_active,
   _loaded_at
 FROM edw_dev_hris.hgv_comp.dim_marketing_rep;
 
 -- ---------------------------------------------------------------------------
--- Step 8) Create convenience views for API
+-- Step 8) Create convenience views for API (app schema compatible)
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE VIEW edw_dev_hris.hgv_comp.fact_marketing_rep_metric
 AS
 SELECT
-  r.rep_employee_id,
+  r.rep_id,
   r.rep_name,
-  r.period_start,
+  r.period_id,
   p.period_label,
   r.tours,
   r.tours_paid,
@@ -243,7 +252,7 @@ SELECT
   END AS qualified_tour_pct
 FROM edw_dev_hris.hgv_comp.fact_marketing_rep_period r
 INNER JOIN edw_dev_hris.hgv_comp.dim_period p
-  ON r.period_start = p.period_start;
+  ON r.period_id = p.period_id;
 
 -- =============================================================================
 -- END OF MATERIALIZATION
