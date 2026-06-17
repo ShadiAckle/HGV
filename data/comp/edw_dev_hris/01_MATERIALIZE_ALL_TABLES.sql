@@ -9,6 +9,12 @@
 -- ---------------------------------------------------------------------------
 -- Step 1) Staging: marketing spine (2026) with aggregated detail
 -- ONE row per tour_key_hash, detail pre-aggregated to prevent duplication
+--
+-- CSV column reference:
+--   marketing.csv: tour_key_hash, tour_id, tour_booked_date, tour_date,
+--                  tour_status_desc, office_code, office_region, channel
+--   detail.csv:    tour_key_hash, qualified, showed, lead_name,
+--                  ownership_status, transaction_date
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp._stg_marketing_tour_detail
 USING DELTA AS
@@ -18,6 +24,7 @@ WITH tours_2026 AS (
     m.tour_id,
     m.tour_status_desc,
     m.tour_booked_date,
+    TO_DATE(m.tour_date) AS tour_date,      -- actual tour/arrival date
     m.office_code,
     COALESCE(NULLIF(TRIM(m.office_region), ''), 'Other') AS office_region,
     COALESCE(m.channel, 'MKT') AS channel,
@@ -29,7 +36,11 @@ tour_detail_agg AS (
   SELECT
     d.tour_key_hash,
     MAX(CASE WHEN CAST(d.qualified AS STRING) IN ('1','true','TRUE','Y') THEN 1 ELSE 0 END) AS qualified_flag,
-    MAX(CASE WHEN CAST(d.showed AS STRING) IN ('1','true','TRUE','Y') THEN 1 ELSE 0 END) AS showed_flag
+    MAX(CASE WHEN CAST(d.showed   AS STRING) IN ('1','true','TRUE','Y') THEN 1 ELSE 0 END) AS showed_flag,
+    -- lead_name = guest name (from detail.csv column lead_name)
+    FIRST(NULLIF(TRIM(d.lead_name), ''))        AS lead_name,
+    -- ownership_status = guest type: 'Owner', 'New Buyer', 'Non-Owner', etc.
+    FIRST(NULLIF(TRIM(d.ownership_status), '')) AS ownership_status
   FROM edw_dev_cognos.cognos_fm.it_smt_detail d
   WHERE d.tour_key_hash IN (SELECT tour_key_hash FROM tours_2026)
     AND TO_DATE(d.transaction_date) BETWEEN DATE '2026-01-01' AND DATE '2026-12-31'
@@ -40,11 +51,14 @@ SELECT
   t.tour_id,
   t.tour_status_desc,
   t.tour_booked_date,
+  t.tour_date,
   t.office_code,
   t.office_region,
   t.channel,
-  COALESCE(d.qualified_flag, 0) = 1 AS qualified_flag,
-  COALESCE(d.showed_flag, 0) = 1    AS showed_flag
+  COALESCE(d.qualified_flag, 0) = 1  AS qualified_flag,
+  COALESCE(d.showed_flag, 0) = 1     AS showed_flag,
+  d.lead_name                         AS guest_name,
+  d.ownership_status                  AS guest_type
 FROM tours_2026 t
 LEFT JOIN tour_detail_agg d ON t.tour_key_hash = d.tour_key_hash
 WHERE t.rn = 1;
@@ -76,11 +90,14 @@ SELECT
   d.tour_id,
   d.tour_status_desc,
   d.tour_booked_date,
+  d.tour_date,
   d.office_code,
   d.office_region,
   d.channel,
   d.qualified_flag,
   d.showed_flag,
+  d.guest_name,
+  d.guest_type,
   p.rep_id,
   COALESCE(p.rep_name, 'UNASSIGNED') AS rep_name,
   p.team_id
@@ -96,18 +113,21 @@ WHERE p.rep_id IS NOT NULL
 -- dim_period schema from compSchemaBootstrap: period_id, period_label,
 --   period_start, period_end, is_current
 -- ---------------------------------------------------------------------------
+-- dim_period derives from actual tour dates (tour_date), not booking dates
+-- period_id format: '2026-Q1' matching CURRENT_PERIOD_ID = '2026-Q2' in compPeriods.ts
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.dim_period
 USING DELTA AS
 SELECT
-  CONCAT(YEAR(period_start), '-Q', QUARTER(period_start)) AS period_id,
-  CONCAT('Q', QUARTER(period_start), ' ', YEAR(period_start)) AS period_label,
+  CONCAT(YEAR(period_start), '-Q', QUARTER(period_start))       AS period_id,
+  CONCAT('Q', QUARTER(period_start), ' ', YEAR(period_start))   AS period_label,
   period_start,
-  LAST_DAY(ADD_MONTHS(period_start, 2)) AS period_end,
+  LAST_DAY(ADD_MONTHS(period_start, 2))                         AS period_end,
   CONCAT(YEAR(period_start), '-Q', QUARTER(period_start)) = '2026-Q2' AS is_current
 FROM (
-  SELECT DISTINCT DATE_TRUNC('quarter', TO_DATE(tour_booked_date)) AS period_start
+  SELECT DISTINCT DATE_TRUNC('quarter', COALESCE(TO_DATE(tour_date), TO_DATE(tour_booked_date))) AS period_start
   FROM edw_dev_cognos.cognos_fm.it_smt_marketing
   WHERE TO_DATE(tour_booked_date) BETWEEN DATE '2026-01-01' AND DATE '2026-12-31'
+    AND COALESCE(TO_DATE(tour_date), TO_DATE(tour_booked_date)) IS NOT NULL
 )
 ORDER BY period_start;
 
@@ -159,14 +179,20 @@ USING DELTA AS
 SELECT
   t.tour_id,
   t.rep_id,
-  CONCAT(YEAR(TO_DATE(t.tour_booked_date)), '-Q', QUARTER(TO_DATE(t.tour_booked_date))) AS period_id,
+  -- period_id uses actual tour date; fallback to booking date if tour_date is null
+  CONCAT(
+    YEAR(COALESCE(t.tour_date, TO_DATE(t.tour_booked_date))),
+    '-Q',
+    QUARTER(COALESCE(t.tour_date, TO_DATE(t.tour_booked_date)))
+  ) AS period_id,
 
-  -- Guest columns: not available in Cognos source, left NULL
-  CAST(NULL AS STRING)  AS guest_name,
-  CAST(NULL AS STRING)  AS guest_type,
+  -- Guest columns from detail.csv: lead_name → guest_name, ownership_status → guest_type
+  t.guest_name,
+  t.guest_type,
 
-  TO_DATE(t.tour_booked_date) AS arrival_date,
-  t.tour_status_desc          AS tour_status,
+  -- arrival_date = actual tour date (tour_date from marketing.csv), not booking date
+  COALESCE(t.tour_date, TO_DATE(t.tour_booked_date)) AS arrival_date,
+  t.tour_status_desc AS tour_status,
 
   -- Code: Q = qualified, NQ = not qualified (matches demo seed pattern)
   CASE WHEN t.qualified_flag THEN 'Q' ELSE 'NQ' END AS code,
