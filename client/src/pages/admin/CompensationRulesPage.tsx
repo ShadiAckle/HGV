@@ -75,7 +75,7 @@ export function CompensationRulesPage() {
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...input, modified_by: activeRepId || 'system' }),
+        body: JSON.stringify({ ...input, created_by: activeRepId || 'system' }),
       });
 
       if (!res.ok) throw new Error('Save failed');
@@ -99,7 +99,7 @@ export function CompensationRulesPage() {
       const res = await fetch(`/api/admin/tour-status-config/${configId}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modified_by: activeRepId || 'system' }),
+        body: JSON.stringify({ created_by: activeRepId || 'system' }),
       });
 
       if (!res.ok) throw new Error('Delete failed');
@@ -141,7 +141,7 @@ export function CompensationRulesPage() {
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...input, modified_by: activeRepId || 'system' }),
+        body: JSON.stringify({ ...input, created_by: activeRepId || 'system' }),
       });
 
       if (!res.ok) throw new Error('Save failed');
@@ -165,7 +165,7 @@ export function CompensationRulesPage() {
       const res = await fetch(`/api/admin/comp-rule-config/${configId}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modified_by: activeRepId || 'system' }),
+        body: JSON.stringify({ created_by: activeRepId || 'system' }),
       });
 
       if (!res.ok) throw new Error('Delete failed');
@@ -207,7 +207,7 @@ export function CompensationRulesPage() {
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...input, modified_by: activeRepId || 'system' }),
+        body: JSON.stringify({ ...input, created_by: activeRepId || 'system' }),
       });
 
       if (!res.ok) throw new Error('Save failed');
@@ -231,7 +231,7 @@ export function CompensationRulesPage() {
       const res = await fetch(`/api/admin/rep-filter-config/${configId}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modified_by: activeRepId || 'system' }),
+        body: JSON.stringify({ created_by: activeRepId || 'system' }),
       });
 
       if (!res.ok) throw new Error('Delete failed');
@@ -444,9 +444,8 @@ function TourStatusConfigTab({
     tour_status_desc: '',
     payout_amount: 0,
     is_active: true,
-    effective_date: new Date().toISOString().split('T')[0],
-    rule_description: '',
-    modified_by: '',
+    effective_start_date: new Date().toISOString().split('T')[0],
+    created_by: '',
   });
 
   useEffect(() => {
@@ -455,8 +454,8 @@ function TourStatusConfigTab({
         tour_status_desc: editingConfig.tour_status_desc,
         payout_amount: editingConfig.payout_amount,
         is_active: editingConfig.is_active,
-        effective_date: editingConfig.effective_date,
-        end_date: editingConfig.end_date || undefined,
+        effective_start_date: editingConfig.effective_date,
+        effective_end_date: editingConfig.end_date || undefined,
         rule_description: editingConfig.rule_description || '',
         modified_by: '',
       });
@@ -465,7 +464,7 @@ function TourStatusConfigTab({
         tour_status_desc: '',
         payout_amount: 0,
         is_active: true,
-        effective_date: new Date().toISOString().split('T')[0],
+        effective_start_date: new Date().toISOString().split('T')[0],
         rule_description: '',
         modified_by: '',
       });
@@ -538,8 +537,8 @@ function TourStatusConfigTab({
               </label>
               <input
                 type="date"
-                value={formData.effective_date}
-                onChange={(e) => setFormData({ ...formData, effective_date: e.target.value })}
+                value={formData.effective_start_date}
+                onChange={(e) => setFormData({ ...formData, effective_start_date: e.target.value })}
                 className="input w-full"
                 required
               />
@@ -549,8 +548,8 @@ function TourStatusConfigTab({
               <label className="block text-xs font-semibold text-foreground mb-1">End Date (Optional)</label>
               <input
                 type="date"
-                value={formData.end_date || ''}
-                onChange={(e) => setFormData({ ...formData, end_date: e.target.value || undefined })}
+                value={formData.effective_end_date || ''}
+                onChange={(e) => setFormData({ ...formData, effective_end_date: e.target.value || undefined })}
                 className="input w-full"
               />
             </div>
@@ -614,7 +613,7 @@ function TourStatusConfigTab({
                 <tr key={config.config_id} className="border-b border-border/50 hover:bg-muted/20">
                   <td className="py-2 px-3 font-mono">{formatTourStatusDisplay(config.tour_status_desc)}</td>
                   <td className="py-2 px-3 text-right font-semibold">${config.payout_amount.toFixed(2)}</td>
-                  <td className="py-2 px-3">{config.effective_date}</td>
+                  <td className="py-2 px-3">{config.effective_start_date}</td>
                   <td className="py-2 px-3 text-muted-foreground">{config.rule_description || '—'}</td>
                   <td className="py-2 px-3 text-center">
                     <span
@@ -682,9 +681,8 @@ function CompRuleConfigTab({
     rule_name: '',
     rule_value: '',
     is_active: true,
-    effective_date: new Date().toISOString().split('T')[0],
-    rule_description: '',
-    modified_by: '',
+    effective_start_date: new Date().toISOString().split('T')[0],
+    created_by: '',
   });
 
   useEffect(() => {
@@ -692,10 +690,9 @@ function CompRuleConfigTab({
       setFormData({
         rule_name: editingConfig.rule_name,
         rule_value: editingConfig.rule_value,
-        rule_parameters: editingConfig.rule_parameters || undefined,
         is_active: editingConfig.is_active,
-        effective_date: editingConfig.effective_date,
-        end_date: editingConfig.end_date || undefined,
+        effective_start_date: editingConfig.effective_date,
+        effective_end_date: editingConfig.end_date || undefined,
         rule_description: editingConfig.rule_description || '',
         modified_by: '',
       });
@@ -704,7 +701,7 @@ function CompRuleConfigTab({
         rule_name: 'multi_rep_credit_policy',
         rule_value: 'first_rep_only',
         is_active: true,
-        effective_date: new Date().toISOString().split('T')[0],
+        effective_start_date: new Date().toISOString().split('T')[0],
         rule_description: '',
         modified_by: '',
       });
@@ -773,8 +770,8 @@ function CompRuleConfigTab({
               </label>
               <input
                 type="date"
-                value={formData.effective_date}
-                onChange={(e) => setFormData({ ...formData, effective_date: e.target.value })}
+                value={formData.effective_start_date}
+                onChange={(e) => setFormData({ ...formData, effective_start_date: e.target.value })}
                 className="input w-full"
                 required
               />
@@ -784,8 +781,8 @@ function CompRuleConfigTab({
               <label className="block text-xs font-semibold text-foreground mb-1">End Date (Optional)</label>
               <input
                 type="date"
-                value={formData.end_date || ''}
-                onChange={(e) => setFormData({ ...formData, end_date: e.target.value || undefined })}
+                value={formData.effective_end_date || ''}
+                onChange={(e) => setFormData({ ...formData, effective_end_date: e.target.value || undefined })}
                 className="input w-full"
               />
             </div>
@@ -848,7 +845,7 @@ function CompRuleConfigTab({
                 <tr key={config.config_id} className="border-b border-border/50 hover:bg-muted/20">
                   <td className="py-2 px-3 font-mono text-xs">{config.rule_name}</td>
                   <td className="py-2 px-3 font-semibold">{config.rule_value}</td>
-                  <td className="py-2 px-3">{config.effective_date}</td>
+                  <td className="py-2 px-3">{config.effective_start_date}</td>
                   <td className="py-2 px-3 text-muted-foreground">{config.rule_description || '—'}</td>
                   <td className="py-2 px-3 text-center">
                     <span
@@ -916,9 +913,8 @@ function RepFilterConfigTab({
     filter_type: 'exclude_pattern',
     filter_value: '',
     is_active: true,
-    effective_date: new Date().toISOString().split('T')[0],
-    rule_description: '',
-    modified_by: '',
+    effective_start_date: new Date().toISOString().split('T')[0],
+    created_by: '',
   });
 
   useEffect(() => {
@@ -926,10 +922,9 @@ function RepFilterConfigTab({
       setFormData({
         filter_type: editingConfig.filter_type,
         filter_value: editingConfig.filter_value,
-        filter_parameters: editingConfig.filter_parameters || undefined,
         is_active: editingConfig.is_active,
-        effective_date: editingConfig.effective_date,
-        end_date: editingConfig.end_date || undefined,
+        effective_start_date: editingConfig.effective_date,
+        effective_end_date: editingConfig.end_date || undefined,
         rule_description: editingConfig.rule_description || '',
         modified_by: '',
       });
@@ -938,7 +933,7 @@ function RepFilterConfigTab({
         filter_type: 'exclude_pattern',
         filter_value: '',
         is_active: true,
-        effective_date: new Date().toISOString().split('T')[0],
+        effective_start_date: new Date().toISOString().split('T')[0],
         rule_description: '',
         modified_by: '',
       });
@@ -1007,8 +1002,8 @@ function RepFilterConfigTab({
               </label>
               <input
                 type="date"
-                value={formData.effective_date}
-                onChange={(e) => setFormData({ ...formData, effective_date: e.target.value })}
+                value={formData.effective_start_date}
+                onChange={(e) => setFormData({ ...formData, effective_start_date: e.target.value })}
                 className="input w-full"
                 required
               />
@@ -1018,8 +1013,8 @@ function RepFilterConfigTab({
               <label className="block text-xs font-semibold text-foreground mb-1">End Date (Optional)</label>
               <input
                 type="date"
-                value={formData.end_date || ''}
-                onChange={(e) => setFormData({ ...formData, end_date: e.target.value || undefined })}
+                value={formData.effective_end_date || ''}
+                onChange={(e) => setFormData({ ...formData, effective_end_date: e.target.value || undefined })}
                 className="input w-full"
               />
             </div>
@@ -1082,7 +1077,7 @@ function RepFilterConfigTab({
                 <tr key={config.config_id} className="border-b border-border/50 hover:bg-muted/20">
                   <td className="py-2 px-3">{config.filter_type}</td>
                   <td className="py-2 px-3 font-mono">{config.filter_value}</td>
-                  <td className="py-2 px-3">{config.effective_date}</td>
+                  <td className="py-2 px-3">{config.effective_start_date}</td>
                   <td className="py-2 px-3 text-muted-foreground">{config.rule_description || '—'}</td>
                   <td className="py-2 px-3 text-center">
                     <span
