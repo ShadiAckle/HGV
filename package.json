@@ -10,7 +10,7 @@
     "build:client": "tsc -b tsconfig.client.json && vite build --config client/vite.config.ts",
     "build:server": "tsc -b tsconfig.server.json && tsdown -c tsdown.server.config.ts",
     "build": "node -e \"console.log('Using pre-built dist/ artifacts')\"",
-    "build:artifacts": "npm run build:server && npm run build:client && node scripts/stage-mcp-app.mjs",
+    "build:artifacts": "npm run build:server && node scripts/build-etl-scripts.mjs && npm run build:client && node scripts/stage-mcp-app.mjs",
     "package:edw-vdi": "node scripts/package-edw-vdi-deploy.mjs",
     "build:local": "npm run sync && npm run typegen && npm run build",
     "typecheck": "tsc -b tsconfig.server.json && tsc -b tsconfig.client.json",
