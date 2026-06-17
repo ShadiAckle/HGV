@@ -1,6 +1,16 @@
 # Complete Database Setup - Run These 2 Files IN ORDER
 
-This is the FULL sweep solution. No more iterating.
+This is the FULL sweep solution. Schema now matches app expectations.
+
+## What Was Fixed
+
+**Schema Alignment**: All tables now use the app's expected column names:
+- `rep_id` (not `rep_employee_id`)
+- `period_id` (not `period_start`)
+- `team_id` (not `rep_team_code`)
+
+**Missing columns added** to `dim_marketing_rep`:
+- `level_code`, `manager_rep_id`, `region`, `is_active`
 
 ## What These Scripts Do
 
@@ -12,7 +22,7 @@ This is the FULL sweep solution. No more iterating.
 - Grants permissions
 
 ### 01_MATERIALIZE_ALL_TABLES.sql
-- Creates ALL fact and dimension tables
+- Creates ALL fact and dimension tables with correct column names
 - Materializes marketing compensation data
 - Creates convenience views
 
