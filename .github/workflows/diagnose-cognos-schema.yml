@@ -35,7 +35,17 @@ jobs:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
         run: |
-          mkdir -p ~/.databrickscfg
+          # Check if secrets are set
+          if [ -z "$DATABRICKS_HOST" ] || [ -z "$DATABRICKS_TOKEN" ]; then
+            echo "::error::Missing GitHub Secrets! Add DATABRICKS_HOST and DATABRICKS_TOKEN at:"
+            echo "::error::https://github.com/ShadiAckle/HGV/settings/secrets/actions"
+            echo "::error::DATABRICKS_HOST should be your workspace URL (e.g., https://your-workspace.cloud.databricks.com)"
+            echo "::error::DATABRICKS_TOKEN should be a personal access token from your workspace"
+            exit 1
+          fi
+          
+          # Create Databricks config file
+          mkdir -p ~/.databricks
           cat > ~/.databrickscfg << EOF
           [DEFAULT]
           host = ${DATABRICKS_HOST}
@@ -46,8 +56,8 @@ jobs:
           token = ${DATABRICKS_TOKEN}
           EOF
           
-          echo "Databricks CLI configured"
-          databricks workspace ls / --profile ${{ github.event.inputs.profile }} || echo "Workspace access verified"
+          echo "Databricks CLI configured successfully"
+          databricks workspace ls / --profile ${{ github.event.inputs.profile }}
       
       - name: Run diagnostic queries
         id: run_queries
