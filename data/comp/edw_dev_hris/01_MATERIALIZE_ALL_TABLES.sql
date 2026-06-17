@@ -134,19 +134,52 @@ ORDER BY period_start;
 -- ---------------------------------------------------------------------------
 -- Step 4) dim_marketing_rep
 -- Exact schema app queries: rep_id, rep_name, level_code, team_id, region, is_active
+--
+-- level_code mapping (drives role_title in compMetadata.ts):
+--   C2a = Marketing Representative (opc_person_1 on tours)
+--   C2b = Marketing Manager       (identified by MANAGER/MGR in team description)
+--   C2c = Marketing Director      (identified by DIRECTOR/DIR in team description)
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.dim_marketing_rep
 USING DELTA AS
+-- Reps: people who appear as opc_person_1 on tours
 SELECT DISTINCT
   rep_id,
   rep_name,
-  'C2a'                   AS level_code,
+  'C2a'                           AS level_code,
   COALESCE(team_id, 'UNASSIGNED') AS team_id,
-  office_region           AS region,
-  TRUE                    AS is_active
+  office_region                   AS region,
+  TRUE                            AS is_active
 FROM edw_dev_hris.hgv_comp._stg_tour_enriched
 WHERE rep_id IS NOT NULL
-  AND rep_id NOT LIKE 'PERSONA-MKT-%'
+
+UNION
+
+-- Managers/Directors: people identified by team description keywords
+-- Uses opc_person_1 as the team leader when team description contains manager/director keywords
+SELECT DISTINCT
+  CAST(p.opc_person_1_employee_id AS STRING)  AS rep_id,
+  p.opc_person_1_name                          AS rep_name,
+  CASE
+    WHEN UPPER(p.opc_team_description) LIKE '%DIRECTOR%' THEN 'C2c'
+    ELSE 'C2b'
+  END                                          AS level_code,
+  CAST(p.opc_team_code AS STRING)              AS team_id,
+  COALESCE(NULLIF(TRIM(m.office_region), ''), 'Other') AS region,
+  TRUE                                         AS is_active
+FROM edw_dev_cognos.cognos_fm.it_smt_personnel p
+JOIN edw_dev_cognos.cognos_fm.it_smt_marketing m
+  ON m.tour_key_hash = p.tour_key_hash
+WHERE TO_DATE(m.tour_booked_date) BETWEEN DATE '2026-01-01' AND DATE '2026-12-31'
+  AND p.opc_person_1_employee_id IS NOT NULL
+  AND CAST(p.opc_person_1_employee_id AS STRING) NOT IN ('0', '')
+  AND (
+    UPPER(p.opc_team_description) LIKE '%MANAGER%'
+    OR UPPER(p.opc_team_description) LIKE '%MGR%'
+    OR UPPER(p.opc_team_description) LIKE '%DIRECTOR%'
+    OR UPPER(p.opc_team_description) LIKE '%DIR%'
+  )
+
 ORDER BY rep_name;
 
 -- ---------------------------------------------------------------------------

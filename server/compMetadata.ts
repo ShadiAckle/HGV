@@ -58,9 +58,18 @@ export async function fetchCompMetadata(runSql: RunSql) {
           team_id: String(r.team_id),
           region: String(r.region),
           is_active: r.is_active === true || r.is_active === 'true',
-          role_title: 'Marketing Representative',
-          persona_id: 'marketing_rep',
-          plan_id: 'PLAN-MKT-REP-2026',
+          role_title:
+            r.level_code === 'C2c' ? 'Marketing Director' :
+            r.level_code === 'C2b' ? 'Marketing Manager' :
+            'Marketing Representative',
+          persona_id:
+            r.level_code === 'C2c' ? 'marketing_director' :
+            r.level_code === 'C2b' ? 'marketing_manager' :
+            'marketing_rep',
+          plan_id:
+            r.level_code === 'C2c' ? 'PLAN-MKT-DIR-2026' :
+            r.level_code === 'C2b' ? 'PLAN-MKT-MGR-2026' :
+            'PLAN-MKT-REP-2026',
           identity_group: 'marketing_channel' as const,
         }))
       : production

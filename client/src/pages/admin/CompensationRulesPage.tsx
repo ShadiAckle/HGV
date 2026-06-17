@@ -454,10 +454,9 @@ function TourStatusConfigTab({
         tour_status_desc: editingConfig.tour_status_desc,
         payout_amount: editingConfig.payout_amount,
         is_active: editingConfig.is_active,
-        effective_start_date: editingConfig.effective_date,
-        effective_end_date: editingConfig.end_date || undefined,
-        rule_description: editingConfig.rule_description || '',
-        modified_by: '',
+        effective_start_date: editingConfig.effective_start_date,
+        effective_end_date: editingConfig.effective_end_date ?? undefined,
+        created_by: '',
       });
     } else {
       setFormData({
@@ -465,8 +464,7 @@ function TourStatusConfigTab({
         payout_amount: 0,
         is_active: true,
         effective_start_date: new Date().toISOString().split('T')[0],
-        rule_description: '',
-        modified_by: '',
+        created_by: '',
       });
     }
   }, [editingConfig]);
@@ -554,17 +552,6 @@ function TourStatusConfigTab({
               />
             </div>
 
-            <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-foreground mb-1">Description (Optional)</label>
-              <textarea
-                value={formData.rule_description}
-                onChange={(e) => setFormData({ ...formData, rule_description: e.target.value })}
-                className="input w-full"
-                rows={2}
-                placeholder="Explain when this rule applies..."
-              />
-            </div>
-
             <div className="md:col-span-2 flex items-center gap-2">
               <input
                 type="checkbox"
@@ -603,7 +590,6 @@ function TourStatusConfigTab({
                 <th className="text-left py-2 px-3 font-semibold text-foreground">Status</th>
                 <th className="text-right py-2 px-3 font-semibold text-foreground">Payout</th>
                 <th className="text-left py-2 px-3 font-semibold text-foreground">Effective Date</th>
-                <th className="text-left py-2 px-3 font-semibold text-foreground">Description</th>
                 <th className="text-center py-2 px-3 font-semibold text-foreground">Status</th>
                 <th className="text-right py-2 px-3 font-semibold text-foreground">Actions</th>
               </tr>
@@ -614,7 +600,6 @@ function TourStatusConfigTab({
                   <td className="py-2 px-3 font-mono">{formatTourStatusDisplay(config.tour_status_desc)}</td>
                   <td className="py-2 px-3 text-right font-semibold">${config.payout_amount.toFixed(2)}</td>
                   <td className="py-2 px-3">{config.effective_start_date}</td>
-                  <td className="py-2 px-3 text-muted-foreground">{config.rule_description || '—'}</td>
                   <td className="py-2 px-3 text-center">
                     <span
                       className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
@@ -690,11 +675,11 @@ function CompRuleConfigTab({
       setFormData({
         rule_name: editingConfig.rule_name,
         rule_value: editingConfig.rule_value,
+        rule_description: editingConfig.rule_description ?? undefined,
         is_active: editingConfig.is_active,
-        effective_start_date: editingConfig.effective_date,
-        effective_end_date: editingConfig.end_date || undefined,
-        rule_description: editingConfig.rule_description || '',
-        modified_by: '',
+        effective_start_date: editingConfig.effective_start_date,
+        effective_end_date: editingConfig.effective_end_date ?? undefined,
+        created_by: '',
       });
     } else {
       setFormData({
@@ -702,8 +687,7 @@ function CompRuleConfigTab({
         rule_value: 'first_rep_only',
         is_active: true,
         effective_start_date: new Date().toISOString().split('T')[0],
-        rule_description: '',
-        modified_by: '',
+        created_by: '',
       });
     }
   }, [editingConfig]);
@@ -790,8 +774,8 @@ function CompRuleConfigTab({
             <div className="md:col-span-2">
               <label className="block text-xs font-semibold text-foreground mb-1">Description (Optional)</label>
               <textarea
-                value={formData.rule_description}
-                onChange={(e) => setFormData({ ...formData, rule_description: e.target.value })}
+                value={formData.rule_description ?? ''}
+                onChange={(e) => setFormData({ ...formData, rule_description: e.target.value || null })}
                 className="input w-full"
                 rows={2}
                 placeholder="Explain what this rule does..."
@@ -846,7 +830,7 @@ function CompRuleConfigTab({
                   <td className="py-2 px-3 font-mono text-xs">{config.rule_name}</td>
                   <td className="py-2 px-3 font-semibold">{config.rule_value}</td>
                   <td className="py-2 px-3">{config.effective_start_date}</td>
-                  <td className="py-2 px-3 text-muted-foreground">{config.rule_description || '—'}</td>
+                  <td className="py-2 px-3 text-muted-foreground">{config.rule_description ?? '—'}</td>
                   <td className="py-2 px-3 text-center">
                     <span
                       className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
@@ -910,6 +894,7 @@ function RepFilterConfigTab({
   onCancel,
 }: RepFilterConfigTabProps) {
   const [formData, setFormData] = useState<RepFilterConfigInput>({
+    filter_name: '',
     filter_type: 'exclude_pattern',
     filter_value: '',
     is_active: true,
@@ -920,22 +905,22 @@ function RepFilterConfigTab({
   useEffect(() => {
     if (editingConfig) {
       setFormData({
+        filter_name: editingConfig.filter_name,
         filter_type: editingConfig.filter_type,
         filter_value: editingConfig.filter_value,
         is_active: editingConfig.is_active,
-        effective_start_date: editingConfig.effective_date,
-        effective_end_date: editingConfig.end_date || undefined,
-        rule_description: editingConfig.rule_description || '',
-        modified_by: '',
+        effective_start_date: editingConfig.effective_start_date,
+        effective_end_date: editingConfig.effective_end_date ?? undefined,
+        created_by: '',
       });
     } else {
       setFormData({
+        filter_name: '',
         filter_type: 'exclude_pattern',
         filter_value: '',
         is_active: true,
         effective_start_date: new Date().toISOString().split('T')[0],
-        rule_description: '',
-        modified_by: '',
+        created_by: '',
       });
     }
   }, [editingConfig]);
@@ -965,6 +950,20 @@ function RepFilterConfigTab({
       {showForm && (
         <form onSubmit={handleSubmit} className="mb-6 p-4 border rounded-lg bg-muted/30">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-foreground mb-1">
+                Filter Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={formData.filter_name}
+                onChange={(e) => setFormData({ ...formData, filter_name: e.target.value })}
+                className="input w-full"
+                placeholder="e.g., Exclude UNASSIGNED"
+                required
+              />
+            </div>
+
             <div>
               <label className="block text-xs font-semibold text-foreground mb-1">
                 Filter Type <span className="text-red-500">*</span>
@@ -1019,17 +1018,6 @@ function RepFilterConfigTab({
               />
             </div>
 
-            <div className="md:col-span-2">
-              <label className="block text-xs font-semibold text-foreground mb-1">Description (Optional)</label>
-              <textarea
-                value={formData.rule_description}
-                onChange={(e) => setFormData({ ...formData, rule_description: e.target.value })}
-                className="input w-full"
-                rows={2}
-                placeholder="Explain this filter rule..."
-              />
-            </div>
-
             <div className="md:col-span-2 flex items-center gap-2">
               <input
                 type="checkbox"
@@ -1064,10 +1052,10 @@ function RepFilterConfigTab({
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-border">
-                <th className="text-left py-2 px-3 font-semibold text-foreground">Filter Type</th>
+                <th className="text-left py-2 px-3 font-semibold text-foreground">Name</th>
+                <th className="text-left py-2 px-3 font-semibold text-foreground">Type</th>
                 <th className="text-left py-2 px-3 font-semibold text-foreground">Value</th>
                 <th className="text-left py-2 px-3 font-semibold text-foreground">Effective Date</th>
-                <th className="text-left py-2 px-3 font-semibold text-foreground">Description</th>
                 <th className="text-center py-2 px-3 font-semibold text-foreground">Status</th>
                 <th className="text-right py-2 px-3 font-semibold text-foreground">Actions</th>
               </tr>
@@ -1075,10 +1063,10 @@ function RepFilterConfigTab({
             <tbody>
               {configs.map((config) => (
                 <tr key={config.config_id} className="border-b border-border/50 hover:bg-muted/20">
+                  <td className="py-2 px-3">{config.filter_name}</td>
                   <td className="py-2 px-3">{config.filter_type}</td>
                   <td className="py-2 px-3 font-mono">{config.filter_value}</td>
                   <td className="py-2 px-3">{config.effective_start_date}</td>
-                  <td className="py-2 px-3 text-muted-foreground">{config.rule_description || '—'}</td>
                   <td className="py-2 px-3 text-center">
                     <span
                       className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
