@@ -69,6 +69,17 @@ function ownerStatus(guestType: string, ownerFlag: boolean): string {
   return guestType || 'Courtesy';
 }
 
+/** Normalize Cognos tour_status strings to the canonical UI format. */
+export function normalizeTourStatus(raw: string): string {
+  const upper = raw.toUpperCase().trim();
+  if (upper === 'SHOW' || upper === 'SHOWN' || upper === 'TOUR' || upper === 'PRESENTED') return 'SHOWN';
+  if (upper === 'NO SHOW' || upper === 'NO-SHOW' || upper === 'NOSHOW') return 'NO_SHOW';
+  if (upper === 'CANCEL' || upper === 'CANCELED' || upper === 'CANCELLED' || upper === 'CANC') return 'CANCELED';
+  if (upper === 'BOOK' || upper === 'BOOKED') return 'BOOKED';
+  // Return uppercased with spaces replaced by underscores as a safe default
+  return upper.replace(/\s+/g, '_');
+}
+
 const TOUR_ENRICHMENT_SELECT = `
   SELECT
     tp.tour_id, tp.rep_id, tp.period_id, tp.guest_name, tp.guest_type,
@@ -284,12 +295,14 @@ export async function enrichMarketingTours(
     const base = mapTourEnrichmentRow(row);
     const guestId = base.guest_id;
     const propertiesOwned = guestId ? ownershipByGuest.get(guestId) ?? [] : [];
+    const rawGuestName = String(row.guest_name ?? '').trim();
     enriched.push({
       tour_id: String(row.tour_id),
-      guest_name: normalizeDisplayText(String(row.guest_name ?? '')),
+      // Fall back to guest_type (Owner / New Buyer) when lead_name is sparse in Cognos
+      guest_name: normalizeDisplayText(rawGuestName || String(row.guest_type ?? '')),
       guest_type: String(row.guest_type ?? ''),
       arrival_date: row.arrival_date != null ? String(row.arrival_date) : undefined,
-      tour_status: String(row.tour_status ?? ''),
+      tour_status: normalizeTourStatus(String(row.tour_status ?? '')),
       code: formatTourCode(row.code),
       payout: n(row.payout),
       fps_eligible: b(row.fps_eligible),

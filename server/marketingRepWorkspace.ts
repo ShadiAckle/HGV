@@ -5,7 +5,7 @@ import {
   netStatementPayout,
 } from '../shared/marketingEarningsAlign.js';
 import { formatTourCode, normalizeDisplayText } from '../shared/normalizeText.js';
-import { enrichMarketingTours } from './marketingTourContext.js';
+import { enrichMarketingTours, normalizeTourStatus } from './marketingTourContext.js';
 import { fetchMarketingDeskRank } from './marketingMoneyMap.js';
 import { buildMarketingMoneyMap, type MarketingMoneyMap } from '../shared/marketingMoneyMap.js';
 import { getPlanAssessmentFallback } from '../shared/planAssessmentCatalog.js';
@@ -199,17 +199,27 @@ export async function buildMarketingRepWorkspace(
   } catch (err) {
     console.warn('Guest-enriched tour query failed — falling back to base ledger:', err instanceof Error ? err.message : err);
     const tourRows = await runSql(`
-      SELECT tour_id, guest_name, guest_type, arrival_date, tour_status, code, payout, fps_eligible, fps_potential, notes
+      SELECT tour_id, guest_name, guest_type, arrival_date, tour_status, code, payout,
+             fps_eligible, fps_potential, notes, tour_booked_date, planned_tour_location_id
       FROM workspace.hgv_comp.fact_marketing_tour_payout
       WHERE rep_id = '${safeRep}' AND period_id = '${safePeriod}'
       ORDER BY arrival_date DESC
     `);
-    payload.tours = tourRows.map((row) => ({
-      ...row,
-      guest_name: normalizeDisplayText(String(row.guest_name ?? '')),
-      code: formatTourCode(row.code),
-      notes: row.notes != null ? normalizeDisplayText(String(row.notes)) : row.notes,
-    }));
+    payload.tours = tourRows.map((row) => {
+      const rawGuestName = String(row.guest_name ?? '').trim();
+      return {
+        ...row,
+        // Fall back to guest_type (Owner/New Buyer) when Cognos lead_name is sparse
+        guest_name: normalizeDisplayText(rawGuestName || String(row.guest_type ?? '')),
+        tour_status: normalizeTourStatus(String(row.tour_status ?? '')),
+        code: formatTourCode(row.code),
+        notes: row.notes != null ? normalizeDisplayText(String(row.notes)) : row.notes,
+        // Expose location_id as display label when enriched location table is unavailable
+        planned_tour_location: row.planned_tour_location_id
+          ? { location_name: String(row.planned_tour_location_id), market: '' }
+          : undefined,
+      };
+    });
   }
 
   payload.insights_context = formatMarketingInsightContext(payload);

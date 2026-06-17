@@ -74,16 +74,19 @@ function planMetricKey(metricName: string): string {
 
 export function computeTourImpactChip(tour: Record<string, unknown>): TourImpactChip {
   const tourId = String(tour.tour_id ?? '');
-  const status = String(tour.tour_status ?? '').toUpperCase();
+  // Normalize Cognos status: 'No Show' → 'NO SHOW', 'Show' → 'SHOW'
+  const status = String(tour.tour_status ?? '').toUpperCase().replace(/[-_]/g, ' ').trim();
   const payout = Number(tour.payout ?? 0);
   const fpsPotential = Number(tour.fps_potential ?? 0);
   const guestType = String(tour.guest_type ?? '');
   const code = String(tour.code ?? '').toUpperCase();
   const notes = String(tour.notes ?? '');
-  const guestName = String(tour.guest_name ?? 'Guest');
+  // Use guest_name if available; fall back to guest_type (Owner/New Buyer) so AI context is meaningful
+  const guestName = String(tour.guest_name ?? tour.guest_type ?? 'Guest');
   const notesLower = notes.toLowerCase();
+  const isNoShow = status === 'NO SHOW' || status === 'NO_SHOW' || status === 'NOSHOW';
 
-  if (status === 'NO_SHOW') {
+  if (isNoShow) {
     const lost = payout + fpsPotential;
     const upside = lost > 0 ? `${fmtUSD(lost)} lost if rebooked` : undefined;
     const reason = notes || 'No-show — rebook to recover qualified + FPS pay';
@@ -163,17 +166,20 @@ export function buildMarketingMoneyMap(input: BuildMoneyMapInput): MarketingMone
   let fpsOpenCount = 0;
 
   for (const tour of tours) {
-    const status = String(tour.tour_status ?? '').toUpperCase();
+    // Normalize Cognos status values: 'No Show' → 'NO SHOW', 'Show' → 'SHOW', etc.
+    const status = String(tour.tour_status ?? '').toUpperCase().replace(/[-_]/g, ' ').trim();
     const payout = Number(tour.payout ?? 0);
     const fps = Number(tour.fps_potential ?? 0);
-    if (status === 'NO_SHOW') {
+    const isNoShow = status === 'NO SHOW' || status === 'NO_SHOW' || status === 'NOSHOW';
+    const isShown = status === 'SHOW' || status === 'SHOWN' || status === 'TOUR';
+    if (isNoShow) {
       recoveryUsd += payout + fps;
       recoveryCount += 1;
     }
-    if (status === 'SHOWN' && fps > 0) {
+    if (isShown && fps > 0) {
       const notes = String(tour.notes ?? '').toLowerCase();
       const code = String(tour.code ?? '').toUpperCase();
-      if (code === 'Q' || notes.includes('fps not') || notes.includes('not yet sold')) {
+      if (code === 'Q' || notes.includes('fps not') || notes.includes('not yet sold') || fps > 0) {
         fpsLeakage += fps;
         fpsOpenCount += 1;
       }

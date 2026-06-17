@@ -420,7 +420,9 @@ SELECT rep_id, period_id,
   CAST(0 AS DECIMAL(14,2))                  AS earnings,
   CAST(ROUND(tours_shown * 100.0 / GREATEST(10, 1), 2) AS DECIMAL(6,2)) AS attainment_pct,
   '10 tours shown target'                   AS target_label,
-  CAST(NULL AS DECIMAL(14,2))               AS opportunity_usd
+  CAST(
+    CASE WHEN tours_shown < 10 THEN (10 - tours_shown) * 50.0 ELSE 0 END
+  AS DECIMAL(14,2))                         AS opportunity_usd
 FROM base;
 
 -- ---------------------------------------------------------------------------

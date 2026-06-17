@@ -198,9 +198,103 @@ SELECT 'RF-EXCLUDE-001', 'Exclude UNASSIGNED', 'exclude_pattern', 'UNASSIGNED',
 WHERE NOT EXISTS (SELECT 1 FROM edw_dev_hris.hgv_comp.dim_rep_filter_config WHERE config_id = 'RF-EXCLUDE-001');
 
 -- =============================================================================
+-- Stub tables for optional tour-enrichment joins
+-- These allow the enrichment query in marketingTourContext.ts to run without
+-- throwing TABLE_OR_VIEW_NOT_FOUND. All are empty; data may be populated later.
+-- =============================================================================
+
+-- dim_location: planned tour location & current stay location
+DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.dim_location;
+CREATE TABLE edw_dev_hris.hgv_comp.dim_location (
+  location_id   STRING      NOT NULL,
+  location_name STRING,
+  location_type STRING,
+  market        STRING,
+  brand         STRING,
+  desk_label    STRING
+) USING DELTA;
+
+-- dim_guest: guest identity / qualification
+DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.dim_guest;
+CREATE TABLE edw_dev_hris.hgv_comp.dim_guest (
+  guest_id          STRING  NOT NULL,
+  email             STRING,
+  phone_token       STRING,
+  qualification_code STRING,
+  owner_flag        BOOLEAN
+) USING DELTA;
+
+-- dim_household: guest household demographics
+DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.dim_household;
+CREATE TABLE edw_dev_hris.hgv_comp.dim_household (
+  household_id  STRING NOT NULL,
+  hh_size_band  STRING,
+  income_band   STRING,
+  home_msa      STRING
+) USING DELTA;
+
+-- fact_tour_quality: tour outcome & contract details
+DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.fact_tour_quality;
+CREATE TABLE edw_dev_hris.hgv_comp.fact_tour_quality (
+  tour_id           STRING  NOT NULL,
+  lead_source       STRING,
+  abc_score         STRING,
+  package_type      STRING,
+  showed_flag       BOOLEAN,
+  closed_flag       BOOLEAN,
+  contract_status   STRING,
+  rescission_flag   BOOLEAN,
+  net_sales_volume  DECIMAL(14,2),
+  vpg               DECIMAL(14,2)
+) USING DELTA;
+
+-- fact_guest_rental_stay: rental stay history for guest context
+DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.fact_guest_rental_stay;
+CREATE TABLE edw_dev_hris.hgv_comp.fact_guest_rental_stay (
+  stay_id     STRING  NOT NULL,
+  guest_id    STRING,
+  stay_type   STRING,
+  check_in    DATE,
+  check_out   DATE,
+  nights      INT,
+  location_id STRING
+) USING DELTA;
+
+-- fact_guest_tour_history: prior tour history per guest
+DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.fact_guest_tour_history;
+CREATE TABLE edw_dev_hris.hgv_comp.fact_guest_tour_history (
+  history_id      STRING NOT NULL,
+  guest_id        STRING,
+  tour_id         STRING,
+  rep_id          STRING,
+  tour_date       DATE,
+  tour_status     STRING,
+  outcome_summary STRING
+) USING DELTA;
+
+-- fact_guest_ownership: timeshare ownership records per guest
+DROP TABLE IF EXISTS edw_dev_hris.hgv_comp.fact_guest_ownership;
+CREATE TABLE edw_dev_hris.hgv_comp.fact_guest_ownership (
+  ownership_id     STRING  NOT NULL,
+  guest_id         STRING,
+  property_name    STRING,
+  contract_status  STRING,
+  points_balance   DECIMAL(14,2),
+  brand            STRING,
+  location_id      STRING
+) USING DELTA;
+
+-- =============================================================================
 -- Grant permissions to app service principal
 -- =============================================================================
 GRANT MODIFY ON TABLE edw_dev_hris.hgv_comp.dim_tour_status_config   TO `hgv-app-service-principal`;
 GRANT MODIFY ON TABLE edw_dev_hris.hgv_comp.dim_comp_rule_config      TO `hgv-app-service-principal`;
 GRANT MODIFY ON TABLE edw_dev_hris.hgv_comp.dim_rep_filter_config     TO `hgv-app-service-principal`;
 GRANT MODIFY ON TABLE edw_dev_hris.hgv_comp.fact_comp_config_audit_log TO `hgv-app-service-principal`;
+GRANT SELECT ON TABLE edw_dev_hris.hgv_comp.dim_location              TO `hgv-app-service-principal`;
+GRANT SELECT ON TABLE edw_dev_hris.hgv_comp.dim_guest                 TO `hgv-app-service-principal`;
+GRANT SELECT ON TABLE edw_dev_hris.hgv_comp.dim_household             TO `hgv-app-service-principal`;
+GRANT SELECT ON TABLE edw_dev_hris.hgv_comp.fact_tour_quality         TO `hgv-app-service-principal`;
+GRANT SELECT ON TABLE edw_dev_hris.hgv_comp.fact_guest_rental_stay    TO `hgv-app-service-principal`;
+GRANT SELECT ON TABLE edw_dev_hris.hgv_comp.fact_guest_tour_history   TO `hgv-app-service-principal`;
+GRANT SELECT ON TABLE edw_dev_hris.hgv_comp.fact_guest_ownership      TO `hgv-app-service-principal`;
