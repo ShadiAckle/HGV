@@ -8,10 +8,10 @@ CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.dim_tour_status_config (
   config_id STRING NOT NULL,
   tour_status_desc STRING,
   payout_amount DECIMAL(10,2) NOT NULL,
-  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  is_active BOOLEAN NOT NULL,
   effective_start_date DATE NOT NULL,
   effective_end_date DATE,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+  created_at TIMESTAMP NOT NULL,
   created_by STRING NOT NULL,
   updated_at TIMESTAMP,
   updated_by STRING
@@ -23,10 +23,10 @@ CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.dim_comp_rule_config (
   rule_name STRING NOT NULL,
   rule_value STRING NOT NULL,
   rule_description STRING,
-  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  is_active BOOLEAN NOT NULL,
   effective_start_date DATE NOT NULL,
   effective_end_date DATE,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+  created_at TIMESTAMP NOT NULL,
   created_by STRING NOT NULL,
   updated_at TIMESTAMP,
   updated_by STRING
@@ -38,10 +38,10 @@ CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.dim_rep_filter_config (
   filter_name STRING NOT NULL,
   filter_type STRING NOT NULL,
   filter_value STRING NOT NULL,
-  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  is_active BOOLEAN NOT NULL,
   effective_start_date DATE NOT NULL,
   effective_end_date DATE,
-  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+  created_at TIMESTAMP NOT NULL,
   created_by STRING NOT NULL,
   updated_at TIMESTAMP,
   updated_by STRING
@@ -54,32 +54,32 @@ CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.fact_comp_config_audit_log (
   config_id STRING NOT NULL,
   action STRING NOT NULL,
   changed_by STRING NOT NULL,
-  changed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP(),
+  changed_at TIMESTAMP NOT NULL,
   old_value STRING,
   new_value STRING
 ) USING DELTA
 COMMENT 'Audit trail for all compensation configuration changes';
 
 -- Step 2: Seed default payout rules
-INSERT INTO edw_dev_hris.hgv_comp.dim_tour_status_config (config_id, tour_status_desc, payout_amount, is_active, effective_start_date, created_by)
-SELECT 'cfg_show', 'SHOW', 50.00, TRUE, '2026-01-01', 'system'
+INSERT INTO edw_dev_hris.hgv_comp.dim_tour_status_config (config_id, tour_status_desc, payout_amount, is_active, effective_start_date, created_at, created_by)
+SELECT 'cfg_show', 'SHOW', 50.00, TRUE, '2026-01-01', CURRENT_TIMESTAMP(), 'system'
 WHERE NOT EXISTS (SELECT 1 FROM edw_dev_hris.hgv_comp.dim_tour_status_config WHERE tour_status_desc = 'SHOW');
 
-INSERT INTO edw_dev_hris.hgv_comp.dim_tour_status_config (config_id, tour_status_desc, payout_amount, is_active, effective_start_date, created_by)
-SELECT 'cfg_no_show', 'NO SHOW', 25.00, TRUE, '2026-01-01', 'system'
+INSERT INTO edw_dev_hris.hgv_comp.dim_tour_status_config (config_id, tour_status_desc, payout_amount, is_active, effective_start_date, created_at, created_by)
+SELECT 'cfg_no_show', 'NO SHOW', 25.00, TRUE, '2026-01-01', CURRENT_TIMESTAMP(), 'system'
 WHERE NOT EXISTS (SELECT 1 FROM edw_dev_hris.hgv_comp.dim_tour_status_config WHERE tour_status_desc = 'NO SHOW');
 
-INSERT INTO edw_dev_hris.hgv_comp.dim_tour_status_config (config_id, tour_status_desc, payout_amount, is_active, effective_start_date, created_by)
-SELECT 'cfg_tour', 'TOUR', 50.00, TRUE, '2026-01-01', 'system'
+INSERT INTO edw_dev_hris.hgv_comp.dim_tour_status_config (config_id, tour_status_desc, payout_amount, is_active, effective_start_date, created_at, created_by)
+SELECT 'cfg_tour', 'TOUR', 50.00, TRUE, '2026-01-01', CURRENT_TIMESTAMP(), 'system'
 WHERE NOT EXISTS (SELECT 1 FROM edw_dev_hris.hgv_comp.dim_tour_status_config WHERE tour_status_desc = 'TOUR');
 
-INSERT INTO edw_dev_hris.hgv_comp.dim_tour_status_config (config_id, tour_status_desc, payout_amount, is_active, effective_start_date, created_by)
-SELECT 'cfg_null', '__NULL__', 0.00, TRUE, '2026-01-01', 'system'
+INSERT INTO edw_dev_hris.hgv_comp.dim_tour_status_config (config_id, tour_status_desc, payout_amount, is_active, effective_start_date, created_at, created_by)
+SELECT 'cfg_null', '__NULL__', 0.00, TRUE, '2026-01-01', CURRENT_TIMESTAMP(), 'system'
 WHERE NOT EXISTS (SELECT 1 FROM edw_dev_hris.hgv_comp.dim_tour_status_config WHERE tour_status_desc = '__NULL__');
 
 -- Step 3: Seed default global rules
-INSERT INTO edw_dev_hris.hgv_comp.dim_comp_rule_config (config_id, rule_name, rule_value, rule_description, is_active, effective_start_date, created_by)
-SELECT 'rule_multi_rep', 'multi_rep_credit_policy', 'first_rep_only', 'How to attribute credit when multiple reps are on a tour', TRUE, '2026-01-01', 'system'
+INSERT INTO edw_dev_hris.hgv_comp.dim_comp_rule_config (config_id, rule_name, rule_value, rule_description, is_active, effective_start_date, created_at, created_by)
+SELECT 'rule_multi_rep', 'multi_rep_credit_policy', 'first_rep_only', 'How to attribute credit when multiple reps are on a tour', TRUE, '2026-01-01', CURRENT_TIMESTAMP(), 'system'
 WHERE NOT EXISTS (SELECT 1 FROM edw_dev_hris.hgv_comp.dim_comp_rule_config WHERE rule_name = 'multi_rep_credit_policy');
 
 -- Step 4: Ensure fact_marketing_chargeback exists as a TABLE (not view)
