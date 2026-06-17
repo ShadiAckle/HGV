@@ -23,12 +23,12 @@ CREATE TABLE IF NOT EXISTS dim_tour_status_config (
   tour_status_desc      STRING,           -- Status value from it_smt_marketing (NULL → '__NULL__')
   payout_amount         DECIMAL(10, 2) NOT NULL,
   is_active             BOOLEAN NOT NULL,
-  effective_date        DATE NOT NULL,
-  end_date              DATE,             -- NULL = open-ended
-  rule_description      STRING,           -- Human-readable explanation
-  modified_by           STRING NOT NULL,  -- User/email who last modified
-  modified_at           TIMESTAMP NOT NULL,
-  created_at            TIMESTAMP NOT NULL
+  effective_start_date  DATE NOT NULL,
+  effective_end_date    DATE,             -- NULL = open-ended
+  created_at            TIMESTAMP NOT NULL,
+  created_by            STRING NOT NULL,  -- User/email who created
+  updated_at            TIMESTAMP,
+  updated_by            STRING            -- User/email who last modified
 ) USING DELTA;
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -42,14 +42,14 @@ CREATE TABLE IF NOT EXISTS dim_comp_rule_config (
   config_id             STRING NOT NULL,  -- UUID primary key
   rule_name             STRING NOT NULL,  -- e.g., 'multi_rep_credit_policy'
   rule_value            STRING NOT NULL,  -- e.g., 'first_rep_only', 'split_credit', 'all_reps'
-  rule_parameters       STRING,           -- JSON for complex rules (e.g., {"split_percentage": 50})
+  rule_description      STRING,           -- Human-readable explanation
   is_active             BOOLEAN NOT NULL,
-  effective_date        DATE NOT NULL,
-  end_date              DATE,
-  rule_description      STRING,
-  modified_by           STRING NOT NULL,
-  modified_at           TIMESTAMP NOT NULL,
-  created_at            TIMESTAMP NOT NULL
+  effective_start_date  DATE NOT NULL,
+  effective_end_date    DATE,
+  created_at            TIMESTAMP NOT NULL,
+  created_by            STRING NOT NULL,
+  updated_at            TIMESTAMP,
+  updated_by            STRING
 ) USING DELTA;
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -61,16 +61,16 @@ CREATE TABLE IF NOT EXISTS dim_comp_rule_config (
 
 CREATE TABLE IF NOT EXISTS dim_rep_filter_config (
   config_id             STRING NOT NULL,  -- UUID primary key
+  filter_name           STRING NOT NULL,  -- Human-readable name
   filter_type           STRING NOT NULL,  -- 'exclude_pattern', 'min_tour_count', 'site_filter', etc.
   filter_value          STRING NOT NULL,  -- Pattern/threshold value
-  filter_parameters     STRING,           -- JSON for complex filters
   is_active             BOOLEAN NOT NULL,
-  effective_date        DATE NOT NULL,
-  end_date              DATE,
-  rule_description      STRING,
-  modified_by           STRING NOT NULL,
-  modified_at           TIMESTAMP NOT NULL,
-  created_at            TIMESTAMP NOT NULL
+  effective_start_date  DATE NOT NULL,
+  effective_end_date    DATE,
+  created_at            TIMESTAMP NOT NULL,
+  created_by            STRING NOT NULL,
+  updated_at            TIMESTAMP,
+  updated_by            STRING
 ) USING DELTA;
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -83,13 +83,11 @@ CREATE TABLE IF NOT EXISTS fact_comp_config_audit_log (
   audit_id              STRING NOT NULL,  -- UUID primary key
   config_table          STRING NOT NULL,  -- 'dim_tour_status_config', etc.
   config_id             STRING NOT NULL,  -- Foreign key to config row
-  action_type           STRING NOT NULL,  -- 'INSERT', 'UPDATE', 'DELETE', 'ACTIVATE', 'DEACTIVATE'
+  action                STRING NOT NULL,  -- 'INSERT', 'UPDATE', 'DELETE'
+  changed_by            STRING NOT NULL,
+  changed_at            TIMESTAMP NOT NULL,
   old_value             STRING,           -- JSON snapshot of previous state
-  new_value             STRING,           -- JSON snapshot of new state
-  modified_by           STRING NOT NULL,
-  modified_at           TIMESTAMP NOT NULL,
-  client_ip             STRING,
-  user_agent            STRING
+  new_value             STRING            -- JSON snapshot of new state
 ) USING DELTA;
 
 -- ═══════════════════════════════════════════════════════════════════════════
