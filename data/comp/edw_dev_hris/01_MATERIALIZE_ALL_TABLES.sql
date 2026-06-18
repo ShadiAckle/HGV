@@ -179,54 +179,117 @@ WHERE office_code IS NOT NULL
 GROUP BY office_code;
 
 -- ---------------------------------------------------------------------------
--- Step 5) dim_marketing_rep  (rep picker)
+-- Step 5) dim_marketing_rep  (rep picker + management hierarchy)
 --   C2a = Marketing Representative | C2b = Manager | C2c = Director
+--
+--   The Cognos tour feed has NO org-hierarchy column — opc_person_1 is always
+--   the rep who worked the tour, and opc_team_description names the OPC team
+--   (e.g. "IN-HOUSE", "OAHU IPC"), never a manager/director. So we SYNTHESIZE
+--   the management tier from the real groupings that DO exist in the data:
+--     • one Manager (C2b) per OPC team  (rep_id = 'MGR-<team_code>')
+--     • one Director (C2c) per region   (rep_id = 'DIR-<region>')
+--   Reps roll up to their team manager; managers roll up to their region
+--   director (wired via dim_rep.manager_rep_id in Step 6). When a real HR
+--   hierarchy feed arrives, replace this synthesis — UI/API need no changes.
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.dim_marketing_rep
 USING DELTA AS
-SELECT DISTINCT
-  rep_id,
-  rep_name,
-  'C2a'                           AS level_code,
-  COALESCE(team_id, 'UNASSIGNED') AS team_id,
-  office_region                   AS region,
-  TRUE                            AS is_active
-FROM edw_dev_hris.hgv_comp._stg_tour_enriched
-WHERE rep_id IS NOT NULL
-
-UNION
-
-SELECT DISTINCT
-  CAST(p.opc_person_1_employee_id AS STRING)  AS rep_id,
-  p.opc_person_1_name                          AS rep_name,
-  CASE
-    WHEN UPPER(p.opc_team_description) LIKE '%DIRECTOR%' THEN 'C2c'
-    ELSE 'C2b'
-  END                                          AS level_code,
-  CAST(p.opc_team_code AS STRING)             AS team_id,
-  COALESCE(NULLIF(TRIM(m.office_region), ''), 'Other') AS region,
-  TRUE                                         AS is_active
-FROM edw_dev_cognos.cognos_fm.it_smt_personnel p
-JOIN edw_dev_cognos.cognos_fm.it_smt_marketing m
-  ON m.tour_key_hash = p.tour_key_hash
-WHERE TO_DATE(m.tour_booked_date) BETWEEN DATE '2026-01-01' AND DATE '2026-12-31'
-  AND p.opc_person_1_employee_id IS NOT NULL
-  AND CAST(p.opc_person_1_employee_id AS STRING) NOT IN ('0', '')
-  AND (
-    UPPER(p.opc_team_description) LIKE '%MANAGER%'
-    OR UPPER(p.opc_team_description) LIKE '%MGR%'
-    OR UPPER(p.opc_team_description) LIKE '%DIRECTOR%'
-    OR UPPER(p.opc_team_description) LIKE '%DIR%'
-  );
+WITH rep_team AS (
+  -- assign each rep to their dominant (most-toured) team + region
+  SELECT
+    rep_id,
+    COALESCE(NULLIF(team_id, ''), 'UNASSIGNED') AS team_id,
+    COALESCE(NULLIF(TRIM(office_region), ''), 'Other') AS region,
+    ROW_NUMBER() OVER (
+      PARTITION BY rep_id
+      ORDER BY COUNT(*) DESC, COALESCE(NULLIF(team_id, ''), 'UNASSIGNED')
+    ) AS rn
+  FROM edw_dev_hris.hgv_comp._stg_tour_enriched
+  WHERE rep_id IS NOT NULL
+  GROUP BY rep_id, COALESCE(NULLIF(team_id, ''), 'UNASSIGNED'),
+           COALESCE(NULLIF(TRIM(office_region), ''), 'Other')
+),
+rep_names AS (
+  SELECT rep_id, MAX(rep_name) AS rep_name
+  FROM edw_dev_hris.hgv_comp._stg_tour_enriched
+  WHERE rep_id IS NOT NULL
+  GROUP BY rep_id
+),
+reps AS (
+  SELECT
+    rt.rep_id,
+    rn.rep_name,
+    'C2a'      AS level_code,
+    rt.team_id,
+    rt.region,
+    TRUE       AS is_active
+  FROM rep_team rt
+  JOIN rep_names rn ON rn.rep_id = rt.rep_id
+  WHERE rt.rn = 1
+),
+-- friendly team name from the OPC team description in personnel
+team_lookup AS (
+  SELECT CAST(opc_team_code AS STRING) AS team_id, MAX(opc_team_description) AS team_desc
+  FROM edw_dev_cognos.cognos_fm.it_smt_personnel
+  WHERE opc_team_code IS NOT NULL
+  GROUP BY CAST(opc_team_code AS STRING)
+),
+teams_with_reps AS (
+  SELECT team_id, MAX(region) AS region
+  FROM reps
+  WHERE team_id NOT IN ('UNASSIGNED', '0', '')
+  GROUP BY team_id
+),
+managers AS (
+  SELECT
+    CONCAT('MGR-', t.team_id) AS rep_id,
+    CONCAT('Manager — ', COALESCE(NULLIF(TRIM(tl.team_desc), ''), CONCAT('Team ', t.team_id))) AS rep_name,
+    'C2b'        AS level_code,
+    t.team_id,
+    t.region,
+    (COALESCE(tl.team_desc, '') NOT LIKE '[DNU]%') AS is_active
+  FROM teams_with_reps t
+  LEFT JOIN team_lookup tl ON tl.team_id = t.team_id
+),
+regions AS (
+  SELECT DISTINCT region
+  FROM reps
+  WHERE region IS NOT NULL AND TRIM(region) <> '' AND region <> 'Other'
+),
+directors AS (
+  SELECT
+    CONCAT('DIR-', region)       AS rep_id,
+    CONCAT('Director — ', region) AS rep_name,
+    'C2c'                        AS level_code,
+    CONCAT('REGION-', region)    AS team_id,
+    region,
+    TRUE                         AS is_active
+  FROM regions
+)
+SELECT rep_id, rep_name, level_code, team_id, region, is_active FROM reps
+UNION ALL
+SELECT rep_id, rep_name, level_code, team_id, region, is_active FROM managers
+UNION ALL
+SELECT rep_id, rep_name, level_code, team_id, region, is_active FROM directors;
 
 -- ---------------------------------------------------------------------------
--- Step 6) dim_rep  (unified rep dimension)
+-- Step 6) dim_rep  (unified rep dimension + management reporting lines)
+--   manager_rep_id wires the org tree the manager workspace reads:
+--     rep (C2a)     -> team manager   'MGR-<team_code>'
+--     manager (C2b) -> region director 'DIR-<region>'
+--     director (C2c)-> NULL (top of marketing tree)
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.dim_rep
 USING DELTA AS
 SELECT
   rep_id, rep_name, level_code, team_id,
-  CAST(NULL AS STRING) AS manager_rep_id,
+  CASE
+    WHEN level_code = 'C2a' AND team_id NOT IN ('UNASSIGNED', '0', '')
+         THEN CONCAT('MGR-', team_id)
+    WHEN level_code = 'C2b' AND region IS NOT NULL AND TRIM(region) <> '' AND region <> 'Other'
+         THEN CONCAT('DIR-', region)
+    ELSE CAST(NULL AS STRING)
+  END AS manager_rep_id,
   region, is_active
 FROM edw_dev_hris.hgv_comp.dim_marketing_rep;
 

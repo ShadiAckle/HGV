@@ -34,19 +34,30 @@ export async function fetchCompMetadata(runSql: RunSql) {
   `);
 
   // dim_marketing_rep — lightweight rep picker (do not scan fact_marketing_rep_period for metadata).
+  // Managers (C2b) / directors (C2c) are FEW but must ALWAYS surface, so fetch them
+  // unconditionally and union the top-N reps (which are capped for payload size).
+  // Without this, the alphabetical rep cap would push synthesized leaders out of view.
   const warehouseMarketingReps = await safeQuery(`
-    SELECT
-      rep_id,
-      COALESCE(rep_name, rep_id) AS rep_name,
-      level_code,
-      team_id,
-      region,
-      is_active
-    FROM workspace.hgv_comp.dim_marketing_rep
-    WHERE rep_id IS NOT NULL
-      AND NOT rep_id LIKE 'PERSONA-MKT-%'
-    ORDER BY rep_name
-    LIMIT 500
+    WITH leaders AS (
+      SELECT rep_id, COALESCE(rep_name, rep_id) AS rep_name, level_code, team_id, region, is_active
+      FROM workspace.hgv_comp.dim_marketing_rep
+      WHERE rep_id IS NOT NULL
+        AND NOT rep_id LIKE 'PERSONA-MKT-%'
+        AND level_code IN ('C2b', 'C2c')
+    ),
+    reps AS (
+      SELECT rep_id, COALESCE(rep_name, rep_id) AS rep_name, level_code, team_id, region, is_active
+      FROM workspace.hgv_comp.dim_marketing_rep
+      WHERE rep_id IS NOT NULL
+        AND NOT rep_id LIKE 'PERSONA-MKT-%'
+        AND (level_code = 'C2a' OR level_code IS NULL)
+      ORDER BY rep_name
+      LIMIT 500
+    )
+    SELECT rep_id, rep_name, level_code, team_id, region, is_active FROM leaders
+    UNION ALL
+    SELECT rep_id, rep_name, level_code, team_id, region, is_active FROM reps
+    ORDER BY CASE level_code WHEN 'C2c' THEN 0 WHEN 'C2b' THEN 1 ELSE 2 END, rep_name
   `);
 
   const marketingIdentities =
