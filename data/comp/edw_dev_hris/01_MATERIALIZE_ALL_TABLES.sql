@@ -39,8 +39,16 @@ WITH tours_2026 AS (
 tour_detail_agg AS (
   SELECT
     d.tour_key_hash,
-    MAX(CASE WHEN CAST(d.qualified AS STRING) IN ('1','true','TRUE','Y') THEN 1 ELSE 0 END) AS qualified_flag,
-    MAX(CASE WHEN CAST(d.showed    AS STRING) IN ('1','true','TRUE','Y') THEN 1 ELSE 0 END) AS showed_flag,
+    -- Owner / New Buyer quality signal (the "qualified" dimension).
+    -- A tour is QUALIFIED when an Owner or New Buyer toured (vs courtesy/non-owner).
+    MAX(CASE
+          WHEN CAST(d.qualified AS STRING) IN ('1','true','TRUE','Y') THEN 1
+          WHEN TRY_CAST(d.gross_qualified AS DOUBLE) > 0 THEN 1
+          WHEN TRY_CAST(d.owners      AS DOUBLE) > 0 THEN 1
+          WHEN TRY_CAST(d.new_buyers  AS DOUBLE) > 0 THEN 1
+          WHEN UPPER(TRIM(d.ownership_status)) IN ('OWNER','NEW BUYER') THEN 1
+          ELSE 0
+        END) AS qualified_signal,
     -- sales / cancels (transaction counts) for guest-buy-rate and chargebacks
     SUM(COALESCE(TRY_CAST(d.net_transactions    AS DOUBLE), 0)) AS sales_count,
     SUM(COALESCE(TRY_CAST(d.cancel_transactions AS DOUBLE), 0)) AS cancel_count,
@@ -71,8 +79,12 @@ SELECT
   t.channel,
   t.marketing_program_desc,
   t.package_type,
-  COALESCE(d.qualified_flag, 0) = 1  AS qualified_flag,
-  COALESCE(d.showed_flag, 0) = 1     AS showed_flag,
+  -- SHOWED is authoritative from tour_status_desc (Slide 40/48: pay on shown tours).
+  -- 'TOUR' (52.6% of volume) and 'SHOW' both mean the tour presentation happened.
+  (UPPER(TRIM(t.tour_status_desc)) IN ('TOUR','SHOW','SHOWN','PRESENTED')) AS showed_flag,
+  -- QUALIFIED = showed AND Owner/New-Buyer quality signal
+  (UPPER(TRIM(t.tour_status_desc)) IN ('TOUR','SHOW','SHOWN','PRESENTED')
+     AND COALESCE(d.qualified_signal, 0) = 1) AS qualified_flag,
   COALESCE(d.sales_count, 0)         AS sales_count,
   COALESCE(d.cancel_count, 0)        AS cancel_count,
   COALESCE(d.net_volume_sum, 0)      AS net_volume_sum,
