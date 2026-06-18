@@ -124,7 +124,25 @@ CREATE TABLE edw_dev_hris.hgv_comp.fact_marketing_arrival (
 -- Seed default config data (idempotent — WHERE NOT EXISTS guards)
 -- =============================================================================
 
--- Tour status → payout mapping (matches actual Cognos tour_status_desc values)
+-- =============================================================================
+-- Comp-status → payout mapping (PRIMARY — used by 01_MATERIALIZE payout join).
+-- The materialization derives a comp_status_key per tour:
+--   QUALIFIED = showed & qualified (Owner / New Buyer)
+--   COURTESY  = showed & not qualified
+--   NO SHOW   = did not show
+-- These three rows drive every tour payout. Admins can tune the amounts.
+-- =============================================================================
+INSERT INTO edw_dev_hris.hgv_comp.dim_tour_status_config
+  (config_id, tour_status_desc, payout_amount, is_active, effective_start_date, created_at, created_by)
+SELECT 'TS-QUALIFIED-001', 'QUALIFIED', 75.00, TRUE, DATE '2026-01-01', CURRENT_TIMESTAMP(), 'system'
+WHERE NOT EXISTS (SELECT 1 FROM edw_dev_hris.hgv_comp.dim_tour_status_config WHERE config_id = 'TS-QUALIFIED-001');
+
+INSERT INTO edw_dev_hris.hgv_comp.dim_tour_status_config
+  (config_id, tour_status_desc, payout_amount, is_active, effective_start_date, created_at, created_by)
+SELECT 'TS-COURTESY-001', 'COURTESY', 20.00, TRUE, DATE '2026-01-01', CURRENT_TIMESTAMP(), 'system'
+WHERE NOT EXISTS (SELECT 1 FROM edw_dev_hris.hgv_comp.dim_tour_status_config WHERE config_id = 'TS-COURTESY-001');
+
+-- Raw Cognos status rows (kept for reference / admin visibility; not used by payout join)
 INSERT INTO edw_dev_hris.hgv_comp.dim_tour_status_config
   (config_id, tour_status_desc, payout_amount, is_active, effective_start_date, created_at, created_by)
 SELECT 'TS-SHOW-001', 'SHOW', 50.00, TRUE, DATE '2026-01-01', CURRENT_TIMESTAMP(), 'system'
@@ -142,7 +160,7 @@ WHERE NOT EXISTS (SELECT 1 FROM edw_dev_hris.hgv_comp.dim_tour_status_config WHE
 
 INSERT INTO edw_dev_hris.hgv_comp.dim_tour_status_config
   (config_id, tour_status_desc, payout_amount, is_active, effective_start_date, created_at, created_by)
-SELECT 'TS-NOSHOW-001', 'NO SHOW', 25.00, TRUE, DATE '2026-01-01', CURRENT_TIMESTAMP(), 'system'
+SELECT 'TS-NOSHOW-001', 'NO SHOW', 0.00, TRUE, DATE '2026-01-01', CURRENT_TIMESTAMP(), 'system'
 WHERE NOT EXISTS (SELECT 1 FROM edw_dev_hris.hgv_comp.dim_tour_status_config WHERE config_id = 'TS-NOSHOW-001');
 
 INSERT INTO edw_dev_hris.hgv_comp.dim_tour_status_config

@@ -87,8 +87,11 @@ export function computeTourImpactChip(tour: Record<string, unknown>): TourImpact
   const isNoShow = status === 'NO SHOW' || status === 'NO_SHOW' || status === 'NOSHOW';
 
   if (isNoShow) {
-    const lost = payout + fpsPotential;
-    const upside = lost > 0 ? `${fmtUSD(lost)} lost if rebooked` : undefined;
+    // No-show pays $0; show the potential lost (qualified pay + FPS) as the recoverable upside.
+    const potentialQual = payout > 0 ? payout : 75;
+    const potentialFps = fpsPotential > 0 ? fpsPotential : 250;
+    const lost = potentialQual + potentialFps;
+    const upside = `${fmtUSD(lost)} lost if rebooked`;
     const reason = notes || 'No-show — rebook to recover qualified + FPS pay';
     return {
       tour_id: tourId,
@@ -96,7 +99,7 @@ export function computeTourImpactChip(tour: Record<string, unknown>): TourImpact
       paid_label: '$0',
       upside_label: upside,
       reason,
-      comp_impact_line: `This tour paid $0. ${guestName} no-show left ${fmtUSD(lost)} on the table${fpsPotential > 0 ? ` (includes ${fmtUSD(fpsPotential)} FPS)` : ''}.`,
+      comp_impact_line: `This tour paid $0. ${guestName} no-show left ${fmtUSD(lost)} on the table (includes ${fmtUSD(potentialFps)} FPS).`,
     };
   }
 
@@ -165,6 +168,9 @@ export function buildMarketingMoneyMap(input: BuildMoneyMapInput): MarketingMone
   let fpsLeakage = 0;
   let fpsOpenCount = 0;
 
+  // Standard recoverable value for a no-show = qualified tour pay + FPS opportunity.
+  const STD_QUALIFIED_PAY = 75;
+  const STD_FPS_POTENTIAL = 250;
   for (const tour of tours) {
     // Normalize Cognos status values: 'No Show' → 'NO SHOW', 'Show' → 'SHOW', etc.
     const status = String(tour.tour_status ?? '').toUpperCase().replace(/[-_]/g, ' ').trim();
@@ -173,16 +179,16 @@ export function buildMarketingMoneyMap(input: BuildMoneyMapInput): MarketingMone
     const isNoShow = status === 'NO SHOW' || status === 'NO_SHOW' || status === 'NOSHOW';
     const isShown = status === 'SHOW' || status === 'SHOWN' || status === 'TOUR';
     if (isNoShow) {
-      recoveryUsd += payout + fps;
+      // No-show pays $0; recovery reflects the potential that was lost if rebooked.
+      const potentialQual = payout > 0 ? payout : STD_QUALIFIED_PAY;
+      const potentialFps = fps > 0 ? fps : STD_FPS_POTENTIAL;
+      recoveryUsd += potentialQual + potentialFps;
       recoveryCount += 1;
     }
     if (isShown && fps > 0) {
-      const notes = String(tour.notes ?? '').toLowerCase();
-      const code = String(tour.code ?? '').toUpperCase();
-      if (code === 'Q' || notes.includes('fps not') || notes.includes('not yet sold') || fps > 0) {
-        fpsLeakage += fps;
-        fpsOpenCount += 1;
-      }
+      // Any FPS sitting on a shown qualified tour is "on the table" until sold.
+      fpsLeakage += fps;
+      fpsOpenCount += 1;
     }
   }
 
