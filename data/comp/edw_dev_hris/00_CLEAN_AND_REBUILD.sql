@@ -303,6 +303,49 @@ CREATE TABLE edw_dev_hris.hgv_comp.fact_guest_ownership (
 ) USING DELTA;
 
 -- =============================================================================
+-- Manager-view analytics stubs (empty; let the manager "My Comp" view run).
+-- IF NOT EXISTS so a re-run never wipes data. See 03_manager_view_stubs.sql.
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.fact_manager_intervention (
+  intervention_id STRING NOT NULL, manager_rep_id STRING NOT NULL,
+  target_rep_id STRING NOT NULL, period_id STRING NOT NULL,
+  intervention_type STRING NOT NULL, status STRING NOT NULL,
+  discount_pct DECIMAL(5,2), quota_relief_pct DECIMAL(5,2),
+  tour_id STRING, notes STRING, admin_event_id STRING, created_at TIMESTAMP
+) USING DELTA;
+CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.fact_rep_market_position (
+  rep_id STRING NOT NULL, period_id STRING NOT NULL, rep_name STRING, role_key STRING,
+  tcc_gap_vs_market_pct DECIMAL(6,2), base_pct DECIMAL(6,2), variable_pct DECIMAL(6,2),
+  quota_attainment_pct DECIMAL(6,2)
+) USING DELTA;
+CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.dim_product_line (
+  product_line_id STRING NOT NULL, product_line_name STRING NOT NULL, is_ffs BOOLEAN NOT NULL
+) USING DELTA;
+CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.fact_rep_product_mix (
+  rep_id STRING NOT NULL, period_id STRING NOT NULL,
+  product_line_id STRING NOT NULL, mix_pct DECIMAL(6,2) NOT NULL
+) USING DELTA;
+CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.fact_quota_attainment (
+  rep_id STRING NOT NULL, period_id STRING NOT NULL, plan_version_id STRING NOT NULL,
+  quota_amount DECIMAL(14,2) NOT NULL, credited_amount DECIMAL(14,2) NOT NULL,
+  attainment_pct DECIMAL(6,2) NOT NULL, deals_closed_count INT NOT NULL,
+  next_tier_threshold_pct DECIMAL(6,2) NOT NULL
+) USING DELTA;
+CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.fact_payout (
+  rep_id STRING NOT NULL, period_id STRING NOT NULL,
+  base_pay DECIMAL(14,2) NOT NULL, commission DECIMAL(14,2) NOT NULL,
+  bonus DECIMAL(14,2) NOT NULL, total_earnings DECIMAL(14,2) NOT NULL, total_paid DECIMAL(14,2) NOT NULL
+) USING DELTA;
+CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.fact_team_snapshot (
+  team_id STRING NOT NULL, period_id STRING NOT NULL,
+  team_attainment_pct DECIMAL(6,2) NOT NULL, top_performer_count INT NOT NULL,
+  at_risk_count INT NOT NULL, ffs_sales_pct DECIMAL(6,2) NOT NULL, ffs_target_pct DECIMAL(6,2) NOT NULL
+) USING DELTA;
+CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.dim_team (
+  team_id STRING NOT NULL, team_name STRING NOT NULL, region STRING NOT NULL
+) USING DELTA;
+
+-- =============================================================================
 -- Grant permissions to app service principal
 -- =============================================================================
 GRANT MODIFY ON TABLE edw_dev_hris.hgv_comp.dim_tour_status_config   TO `hgv-app-service-principal`;
@@ -316,3 +359,11 @@ GRANT SELECT ON TABLE edw_dev_hris.hgv_comp.fact_tour_quality         TO `hgv-ap
 GRANT SELECT ON TABLE edw_dev_hris.hgv_comp.fact_guest_rental_stay    TO `hgv-app-service-principal`;
 GRANT SELECT ON TABLE edw_dev_hris.hgv_comp.fact_guest_tour_history   TO `hgv-app-service-principal`;
 GRANT SELECT ON TABLE edw_dev_hris.hgv_comp.fact_guest_ownership      TO `hgv-app-service-principal`;
+GRANT SELECT ON TABLE edw_dev_hris.hgv_comp.fact_manager_intervention TO `hgv-app-service-principal`;
+GRANT SELECT ON TABLE edw_dev_hris.hgv_comp.fact_rep_market_position  TO `hgv-app-service-principal`;
+GRANT SELECT ON TABLE edw_dev_hris.hgv_comp.dim_product_line          TO `hgv-app-service-principal`;
+GRANT SELECT ON TABLE edw_dev_hris.hgv_comp.fact_rep_product_mix      TO `hgv-app-service-principal`;
+GRANT SELECT ON TABLE edw_dev_hris.hgv_comp.fact_quota_attainment     TO `hgv-app-service-principal`;
+GRANT SELECT ON TABLE edw_dev_hris.hgv_comp.fact_payout               TO `hgv-app-service-principal`;
+GRANT SELECT ON TABLE edw_dev_hris.hgv_comp.fact_team_snapshot        TO `hgv-app-service-principal`;
+GRANT SELECT ON TABLE edw_dev_hris.hgv_comp.dim_team                  TO `hgv-app-service-principal`;

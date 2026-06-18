@@ -133,8 +133,12 @@ async function fetchTeamTourAggregates(
 }
 
 export function isMarketingPersona(repId: string): MarketingPersonaId | null {
-  if (repId === 'PERSONA-MKT-MGR') return 'marketing_manager';
-  if (repId === 'PERSONA-MKT-DIR') return 'marketing_director';
+  // Synthesized marketing hierarchy ids: 'MGR-<office_code>' (manager) and
+  // 'DIR-<region>' (director). Without this they fall through to the sales path
+  // (fetchSalesDirectReports), which queries sales-only tables like
+  // fact_rep_product_mix that don't exist in the marketing deploy.
+  if (repId === 'PERSONA-MKT-MGR' || repId.startsWith('MGR-')) return 'marketing_manager';
+  if (repId === 'PERSONA-MKT-DIR' || repId.startsWith('DIR-')) return 'marketing_director';
   if (repId === 'PERSONA-MKT-REP') return 'marketing_rep';
   return null;
 }
@@ -196,7 +200,9 @@ async function fetchMarketingDirectReports(
 ): Promise<DirectReportRow[]> {
   const safeManager = managerRepId.replace(/'/g, "''");
   const safePeriod = periodId.replace(/'/g, "''");
-  const rows = await runSql(`
+  let rows: Record<string, unknown>[] = [];
+  try {
+    rows = await runSql(`
     SELECT r.rep_id, r.rep_name, r.level_code,
            COALESCE(p.qtd_earnings, 0) AS qtd_earnings,
            COALESCE(mp.quota_attainment_pct, 0) AS quota_attainment_pct,
@@ -232,6 +238,10 @@ async function fetchMarketingDirectReports(
     ORDER BY COALESCE(p.qtd_earnings, t.total_nsv) DESC
     LIMIT ${regional ? 50 : 20}
   `);
+  } catch (err) {
+    console.warn('marketing direct-reports query failed (returning empty):', err instanceof Error ? err.message : err);
+    return [];
+  }
 
   return rows.map((r) => {
     const booked = n(r.tours_booked);
@@ -266,7 +276,9 @@ async function fetchMarketingDirectReports(
 async function fetchUpcomingTours(runSql: RunSql, periodId: string, repIds: string[]): Promise<UpcomingTour[]> {
   if (repIds.length === 0) return [];
   const idList = repIds.slice(0, 30).map((id) => `'${id.replace(/'/g, "''")}'`).join(',');
-  const rows = await runSql(`
+  let rows: Record<string, unknown>[] = [];
+  try {
+    rows = await runSql(`
     SELECT t.tour_id, t.rep_id, r.rep_name, t.lead_source, t.abc_score,
            t.showed_flag, t.closed_flag, t.net_sales_volume, t.vpg
     FROM workspace.hgv_comp.fact_tour_quality t
@@ -277,6 +289,10 @@ async function fetchUpcomingTours(runSql: RunSql, periodId: string, repIds: stri
     ORDER BY t.abc_score ASC, t.net_sales_volume DESC
     LIMIT 15
   `);
+  } catch (err) {
+    console.warn('upcoming tours query failed (returning empty):', err instanceof Error ? err.message : err);
+    return [];
+  }
   return rows.map((t) => ({
     tour_id: String(t.tour_id),
     rep_id: String(t.rep_id),
