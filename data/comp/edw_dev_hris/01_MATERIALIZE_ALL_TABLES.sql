@@ -53,9 +53,12 @@ tour_detail_agg AS (
     SUM(COALESCE(TRY_CAST(d.net_transactions    AS DOUBLE), 0)) AS sales_count,
     SUM(COALESCE(TRY_CAST(d.cancel_transactions AS DOUBLE), 0)) AS cancel_count,
     SUM(COALESCE(TRY_CAST(d.net_volume          AS DOUBLE), 0)) AS net_volume_sum,
-    -- lead_name = guest name (sparse); ownership_status = guest type
-    FIRST(NULLIF(TRIM(d.lead_name), ''))        AS lead_name,
-    FIRST(NULLIF(TRIM(d.ownership_status), '')) AS ownership_status,
+    -- lead_name is PII-masked (NULL in the feed); ownership_status = guest type.
+    -- lead_id_formatted is the only populated, unique guest reference, so we use
+    -- it to give each guest a distinct label instead of every row showing the type.
+    FIRST(NULLIF(TRIM(d.lead_name), ''))         AS lead_name,
+    FIRST(NULLIF(TRIM(d.ownership_status), ''))  AS ownership_status,
+    FIRST(NULLIF(TRIM(d.lead_id_formatted), '')) AS lead_ref,
     -- quality signals for ABC grade & lead source
     MAX(TRY_CAST(d.tour_score AS DOUBLE))       AS tour_score,
     FIRST(NULLIF(TRIM(d.fico_color), ''))       AS fico_color,
@@ -88,7 +91,12 @@ SELECT
   COALESCE(d.sales_count, 0)         AS sales_count,
   COALESCE(d.cancel_count, 0)        AS cancel_count,
   COALESCE(d.net_volume_sum, 0)      AS net_volume_sum,
-  d.lead_name                         AS guest_name,
+  -- Guest name: real name if present, else a stable unique ref (no PII name in feed)
+  CASE
+    WHEN LOWER(COALESCE(d.lead_name, '')) NOT IN ('', 'null') THEN d.lead_name
+    WHEN d.lead_ref IS NOT NULL THEN CONCAT('Guest ', d.lead_ref)
+    ELSE 'Guest'
+  END                                 AS guest_name,
   d.ownership_status                  AS guest_type,
   d.tour_score,
   d.fico_color,
