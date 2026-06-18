@@ -16,17 +16,19 @@
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.dim_marketing_rep
 USING DELTA AS
 WITH rep_team AS (
+  -- team = the rep's dominant SALES CENTER (office_code). opc_team_code is empty
+  -- in the real feed, so office is the reliable, meaningful team grouping.
   SELECT
     rep_id,
-    COALESCE(NULLIF(team_id, ''), 'UNASSIGNED') AS team_id,
+    COALESCE(NULLIF(office_code, ''), 'UNASSIGNED') AS team_id,
     COALESCE(NULLIF(TRIM(office_region), ''), 'Other') AS region,
     ROW_NUMBER() OVER (
       PARTITION BY rep_id
-      ORDER BY COUNT(*) DESC, COALESCE(NULLIF(team_id, ''), 'UNASSIGNED')
+      ORDER BY COUNT(*) DESC, COALESCE(NULLIF(office_code, ''), 'UNASSIGNED')
     ) AS rn
   FROM edw_dev_hris.hgv_comp._stg_tour_enriched
   WHERE rep_id IS NOT NULL
-  GROUP BY rep_id, COALESCE(NULLIF(team_id, ''), 'UNASSIGNED'),
+  GROUP BY rep_id, COALESCE(NULLIF(office_code, ''), 'UNASSIGNED'),
            COALESCE(NULLIF(TRIM(office_region), ''), 'Other')
 ),
 rep_names AS (
@@ -42,10 +44,12 @@ reps AS (
   WHERE rt.rn = 1
 ),
 team_lookup AS (
-  SELECT CAST(opc_team_code AS STRING) AS team_id, MAX(opc_team_description) AS team_desc
-  FROM edw_dev_cognos.cognos_fm.it_smt_personnel
-  WHERE opc_team_code IS NOT NULL
-  GROUP BY CAST(opc_team_code AS STRING)
+  -- friendly sales-center name from the office description
+  SELECT COALESCE(NULLIF(office_code, ''), 'UNASSIGNED') AS team_id,
+         MAX(office_description) AS team_desc
+  FROM edw_dev_hris.hgv_comp._stg_tour_enriched
+  WHERE office_code IS NOT NULL
+  GROUP BY COALESCE(NULLIF(office_code, ''), 'UNASSIGNED')
 ),
 teams_with_reps AS (
   SELECT team_id, MAX(region) AS region
@@ -56,11 +60,11 @@ teams_with_reps AS (
 managers AS (
   SELECT
     CONCAT('MGR-', t.team_id) AS rep_id,
-    CONCAT('Manager — ', COALESCE(NULLIF(TRIM(tl.team_desc), ''), CONCAT('Team ', t.team_id))) AS rep_name,
+    CONCAT('Manager — ', COALESCE(NULLIF(TRIM(tl.team_desc), ''), CONCAT('Office ', t.team_id))) AS rep_name,
     'C2b' AS level_code,
     t.team_id,
     t.region,
-    (COALESCE(tl.team_desc, '') NOT LIKE '[DNU]%') AS is_active
+    TRUE AS is_active
   FROM teams_with_reps t
   LEFT JOIN team_lookup tl ON tl.team_id = t.team_id
 ),

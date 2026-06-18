@@ -191,11 +191,10 @@ GROUP BY office_code;
 --   C2a = Marketing Representative | C2b = Manager | C2c = Director
 --
 --   The Cognos tour feed has NO org-hierarchy column — opc_person_1 is always
---   the rep who worked the tour, and opc_team_description names the OPC team
---   (e.g. "IN-HOUSE", "OAHU IPC"), never a manager/director. So we SYNTHESIZE
---   the management tier from the real groupings that DO exist in the data:
---     • one Manager (C2b) per OPC team  (rep_id = 'MGR-<team_code>')
---     • one Director (C2c) per region   (rep_id = 'DIR-<region>')
+--   the rep who worked the tour, and opc_team_code is empty in the real feed.
+--   So we SYNTHESIZE the management tier from the real groupings that DO exist:
+--     • one Manager (C2b) per SALES CENTER / office (rep_id = 'MGR-<office_code>')
+--     • one Director (C2c) per region            (rep_id = 'DIR-<region>')
 --   Reps roll up to their team manager; managers roll up to their region
 --   director (wired via dim_rep.manager_rep_id in Step 6). When a real HR
 --   hierarchy feed arrives, replace this synthesis — UI/API need no changes.
@@ -203,18 +202,20 @@ GROUP BY office_code;
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.dim_marketing_rep
 USING DELTA AS
 WITH rep_team AS (
-  -- assign each rep to their dominant (most-toured) team + region
+  -- assign each rep to their dominant (most-toured) SALES CENTER (office_code).
+  -- NOTE: opc_team_code is empty in the real feed, so office_code is the reliable,
+  -- meaningful team grouping (each sales center gets a manager).
   SELECT
     rep_id,
-    COALESCE(NULLIF(team_id, ''), 'UNASSIGNED') AS team_id,
+    COALESCE(NULLIF(office_code, ''), 'UNASSIGNED') AS team_id,
     COALESCE(NULLIF(TRIM(office_region), ''), 'Other') AS region,
     ROW_NUMBER() OVER (
       PARTITION BY rep_id
-      ORDER BY COUNT(*) DESC, COALESCE(NULLIF(team_id, ''), 'UNASSIGNED')
+      ORDER BY COUNT(*) DESC, COALESCE(NULLIF(office_code, ''), 'UNASSIGNED')
     ) AS rn
   FROM edw_dev_hris.hgv_comp._stg_tour_enriched
   WHERE rep_id IS NOT NULL
-  GROUP BY rep_id, COALESCE(NULLIF(team_id, ''), 'UNASSIGNED'),
+  GROUP BY rep_id, COALESCE(NULLIF(office_code, ''), 'UNASSIGNED'),
            COALESCE(NULLIF(TRIM(office_region), ''), 'Other')
 ),
 rep_names AS (
@@ -235,12 +236,13 @@ reps AS (
   JOIN rep_names rn ON rn.rep_id = rt.rep_id
   WHERE rt.rn = 1
 ),
--- friendly team name from the OPC team description in personnel
+-- friendly team name from the sales-center (office) description
 team_lookup AS (
-  SELECT CAST(opc_team_code AS STRING) AS team_id, MAX(opc_team_description) AS team_desc
-  FROM edw_dev_cognos.cognos_fm.it_smt_personnel
-  WHERE opc_team_code IS NOT NULL
-  GROUP BY CAST(opc_team_code AS STRING)
+  SELECT COALESCE(NULLIF(office_code, ''), 'UNASSIGNED') AS team_id,
+         MAX(office_description) AS team_desc
+  FROM edw_dev_hris.hgv_comp._stg_tour_enriched
+  WHERE office_code IS NOT NULL
+  GROUP BY COALESCE(NULLIF(office_code, ''), 'UNASSIGNED')
 ),
 teams_with_reps AS (
   SELECT team_id, MAX(region) AS region
@@ -251,11 +253,11 @@ teams_with_reps AS (
 managers AS (
   SELECT
     CONCAT('MGR-', t.team_id) AS rep_id,
-    CONCAT('Manager — ', COALESCE(NULLIF(TRIM(tl.team_desc), ''), CONCAT('Team ', t.team_id))) AS rep_name,
+    CONCAT('Manager — ', COALESCE(NULLIF(TRIM(tl.team_desc), ''), CONCAT('Office ', t.team_id))) AS rep_name,
     'C2b'        AS level_code,
     t.team_id,
     t.region,
-    (COALESCE(tl.team_desc, '') NOT LIKE '[DNU]%') AS is_active
+    TRUE         AS is_active
   FROM teams_with_reps t
   LEFT JOIN team_lookup tl ON tl.team_id = t.team_id
 ),
@@ -283,8 +285,8 @@ SELECT rep_id, rep_name, level_code, team_id, region, is_active FROM directors;
 -- ---------------------------------------------------------------------------
 -- Step 6) dim_rep  (unified rep dimension + management reporting lines)
 --   manager_rep_id wires the org tree the manager workspace reads:
---     rep (C2a)     -> team manager   'MGR-<team_code>'
---     manager (C2b) -> region director 'DIR-<region>'
+--     rep (C2a)     -> sales-center manager 'MGR-<office_code>'
+--     manager (C2b) -> region director      'DIR-<region>'
 --     director (C2c)-> NULL (top of marketing tree)
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.dim_rep
