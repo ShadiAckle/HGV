@@ -1,6 +1,9 @@
 -- =============================================================================
 -- MATERIALIZE ALL TABLES  (run AFTER 00_CLEAN_AND_REBUILD.sql)
 --
+-- UI / source mapping companion: 01_ui_section_query_map.sql
+-- Architecture doc: docs/hgv-marketing-comp-ui-data-contract.md
+--
 -- Schema matches EXACTLY what the app server code expects.
 -- Source of truth for expected columns: server/compSchemaBootstrap.ts
 --

@@ -1,7 +1,11 @@
 -- =============================================================================
+-- DEPRECATED — use 01_ui_section_query_map.sql instead.
+-- This file references superseded script 16_materialize_marketing_core.sql.
+-- Canonical build: 00_CLEAN_AND_REBUILD.sql → 01_MATERIALIZE_ALL_TABLES.sql
+-- =============================================================================
 -- UI SECTION → QUERY MAP (Marketing Rep — My Compensation)
 -- =============================================================================
--- Companion to: 16_materialize_marketing_core.sql
+-- Companion to: 16_materialize_marketing_core.sql  (LEGACY — do not run)
 --
 -- Each block below maps a UI section to:
 --   (A) Script 16 step — what BUILDs the warehouse object

@@ -88,8 +88,9 @@ WHEN tour_status_desc IS NULL THEN ???
 ## 3. Marketing Rep Population & Filtering
 
 ### Current State
-- `dim_marketing_rep` contains **9,265 unique reps** for 2026 (built from `opc_person_1_name`, `opc_person_2_name`, `opc_person_3_name` from `it_smt_marketing`).
-- Current V2 SQL includes ALL reps who appear in any `opc_person_*` column.
+- `dim_marketing_rep` is built in **`01_MATERIALIZE_ALL_TABLES.sql` Step 5** from `opc_person_1_employee_id` / `opc_person_1_name` on **`it_smt_personnel`** (one rep per tour), plus synthesized C2b managers (`MGR-<office_code>`) and C2c directors (`DIR-<region>`).
+- Only **`opc_person_1`** receives tour credit today; `opc_person_2` / `opc_person_3` are **not** included in the rep population.
+- See **`01_ui_section_query_map.sql`** for the full source → warehouse mapping.
 
 ### Questions
 

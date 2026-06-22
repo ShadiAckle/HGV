@@ -2,7 +2,21 @@
 -- HGV Compensation Hub — SQL run order for catalog edw_dev_hris
 -- Schema: edw_dev_hris.hgv_comp
 -- =============================================================================
--- DDL (structure only — production go-live):
+--
+-- CANONICAL VDI PRODUCTION BUILD (real Cognos data → Delta tables):
+--   00_CLEAN_AND_REBUILD.sql       — config tables, payout seeds, stubs, grants
+--   01_MATERIALIZE_ALL_TABLES.sql  — main ETL (Cognos → hgv_comp facts/dims)
+--   03_manager_view_stubs.sql      — empty analytics tables for manager My Comp
+--
+-- Companion / documentation (do not execute as ETL):
+--   01_ui_section_query_map.sql     — UI section → script 01 step → runtime SQL
+--   docs/hgv-marketing-comp-ui-data-contract.md
+--
+-- Optional targeted fixes (no full Cognos rescan):
+--   02_rebuild_rep_hierarchy.sql   — dim_marketing_rep + dim_rep only
+--   98_check_managers.sql            — verify C2a/C2b/C2c counts
+--
+-- DDL (structure only — first-time schema or demo environment):
 --   01_create_schema.sql
 --   05_extend_admin_finance.sql
 --   05b_extend_finance_reference.sql
@@ -13,20 +27,20 @@
 --   09_alter_scenario_tour_volume.sql
 --   11_alter_scenario_conversion.sql
 --
--- Production live data (replaces synthetic fact/dim TABLES with VIEWS over Cognos ETL):
+-- DEPRECATED (superseded by 00 + 01 — do not run on VDI):
 --   12_bootstrap_live_source_views.sql
---   (run AFTER 00_bootstrap_all_ddl.sql, SKIP demo seeds below)
---   15_apply_view_performance_governance.sql — bounded view definitions (supersedes 13 + 14)
---   16_materialize_marketing_core.sql — REQUIRED for VDI speed (Delta tables, calendar 2026)
---   17_diagnostic_source_row_counts.sql — row-count probes (run before/after 16; one query at a time)
+--   15_apply_view_performance_governance.sql
+--   16_materialize_marketing_core.sql
+--   16_ui_section_query_map.sql
+--   17_diagnostic_source_row_counts.sql  — diagnostics only (optional)
 --
--- Optional demo seeds (skip when using 12_bootstrap_live_source_views.sql):
+-- Optional demo seeds (skip when using 00 + 01 on live Cognos):
 --   02_seed_synthetic_data.sql, 02a_seed_core_dims.sql, 02b_seed_sales_core.sql,
 --   02c_seed_sales_diversity.sql, 04_seed_semantic_definitions.sql,
 --   05a_seed_admin_finance.sql, 06a_seed_marketing_benchmark.sql,
 --   07a_seed_regional_bonus.sql, 09a_seed_guest_registry.sql, 10a_seed_plan_assessment.sql
 --
--- After app deploy — replace app service principal ID in grant scripts:
+-- After app deploy — grants for app service principal:
 --   03c_grant_catalog.sql, 03a_grant_use_schema.sql, 03b_grant_select.sql,
 --   03d_grant_use_schema.sql, 03e_grant_select.sql, 03_grant_app_sp.sql,
 --   08_grant_app_permissions.sql

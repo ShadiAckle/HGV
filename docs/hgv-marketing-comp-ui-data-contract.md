@@ -5,7 +5,7 @@
 
 **App:** HGV Compensation Hub (`MarketingCompensationView` — “My Compensation” for Marketing Representative)  
 **Catalog:** `edw_dev_hris.hgv_comp` (configurable via `COMP_CATALOG` / `COMP_SCHEMA` env vars)  
-**Reference SQL today:** `data/comp/edw_dev_hris/16_materialize_marketing_core.sql` (materialized Delta) and `12_bootstrap_live_source_views.sql` (live views — deprecated for VDI performance)
+**Reference SQL today:** `data/comp/edw_dev_hris/00_CLEAN_AND_REBUILD.sql` + `01_MATERIALIZE_ALL_TABLES.sql` (materialized Delta). UI/query companion: `01_ui_section_query_map.sql`. Legacy script `16_materialize_marketing_core.sql` is **deprecated**.
 
 ---
 
@@ -433,64 +433,48 @@ WHERE rep_id = :rep_id AND period_id = :period_id
 ORDER BY arrival_date DESC;
 ```
 
-### 5.4 Suggested HGV tour ledger SQL (replace provisional logic)
+### 5.4 Tour ledger SQL (implemented in script 01 Step 7)
 
-**Rep credit:** `opc_person_1_employee_id` / `opc_person_1_name` from `it_smt_personnel` (one row per `tour_key_hash`).
+**Rep credit:** `opc_person_1_employee_id` / `opc_person_1_name` from `it_smt_personnel` (one row per `tour_key_hash`, `rn = 1`).
 
-**Payout rates:** use your official marketing comp plan — the demo uses flat **$75 qualified / $35 showed / $20 courtesy**. Do **not** multiply `net_volume` (contract $) by a rate; that produced multi-million dollar errors.
+**Payout rates:** looked up from `dim_tour_status_config` (seeded in `00_CLEAN_AND_REBUILD.sql`) via `comp_status_key` (`QUALIFIED` / `COURTESY` / `NO SHOW`). Case-insensitive join — do **not** multiply `net_volume` by a rate.
 
-```sql
--- Illustrative pattern — HGV to replace with authoritative plan rules
-SELECT
-  CAST(t.tour_id AS STRING) AS tour_id,
-  CAST(p.opc_person_1_employee_id AS STRING) AS rep_id,
-  CONCAT(YEAR(t.tour_date), '-Q', CEIL(MONTH(t.tour_date) / 3.0)) AS period_id,
-  -- guest_name, guest_type, dates, payout, fps fields ...
-FROM tour_grain_2026 t
-JOIN personnel_one_per_tour p ON t.tour_key_hash = p.tour_key_hash
-WHERE p.opc_person_1_employee_id IS NOT NULL;
-```
+**Showed / qualified:** `tour_status_desc` from `it_smt_marketing` drives `showed_flag`; owner/new-buyer signal from aggregated `it_smt_detail` drives `qualified_flag`.
 
-### 5.5 Suggested period rollup
+See `01_MATERIALIZE_ALL_TABLES.sql` Step 7 and `01_ui_section_query_map.sql` for the full column map.
+
+### 5.5 Period rollup (implemented in script 01 Step 8)
 
 ```sql
-SELECT
-  tp.rep_id,
-  tp.period_id,
-  MAX(tp.rep_name) AS rep_name,
-  COUNT(*) AS tours_total,
-  SUM(CASE WHEN tp.guest_type = 'Qualified' THEN 1 ELSE 0 END) AS qualified_tours,
-  SUM(CASE WHEN tp.guest_type IN ('Qualified', 'Showed') THEN 1 ELSE 0 END) AS tours_shown,
-  SUM(tp.payout) AS qtd_earnings,
-  -- derive show_rate_pct, penetration_pct, tier fields, pay mix from plan
-FROM edw_dev_hris.hgv_comp.fact_marketing_tour_payout tp
-GROUP BY tp.rep_id, tp.period_id;
+-- Pattern: pay sums from tour ledger + distinct tour counts from staging (anti fan-out)
+-- penetration_pct = guest buy rate (sales_count > 0 / tours_shown), NOT qualified rate
+-- next_tier at 3 / 6 / 10 qualified tours; penetration_spiff at 20% buy rate
+SELECT rep_id, period_id, qtd_earnings, qualified_tours, tours_shown,
+       show_rate_pct, penetration_pct, next_tier_label, next_tier_gap_tours
+FROM edw_dev_hris.hgv_comp.fact_marketing_rep_period
+WHERE rep_id = :rep_id AND period_id = :period_id;
 ```
 
-### 5.6 `dim_marketing_rep`
+### 5.6 `dim_marketing_rep` (implemented in script 01 Step 5)
 
 ```sql
-SELECT
-  tp.rep_id,
-  MAX(tp.rep_name) AS rep_name,
-  'MKT' AS level_code,
-  MAX(tp.rep_team_id) AS team_id,
-  MAX(tp.rep_region) AS region,
-  TRUE AS is_active
-FROM edw_dev_hris.hgv_comp.fact_marketing_tour_payout tp
-WHERE tp.rep_id IS NOT NULL AND tp.rep_id <> 'UNASSIGNED'
-GROUP BY tp.rep_id;
+-- C2a: distinct opc_person_1 reps; team_id = dominant office_code
+-- C2b: synthesized Manager per office  (rep_id = 'MGR-' || office_code)
+-- C2c: synthesized Director per region (rep_id = 'DIR-' || region)
+SELECT rep_id, rep_name, level_code, team_id, region, is_active
+FROM edw_dev_hris.hgv_comp.dim_marketing_rep
+WHERE level_code IN ('C2a', 'C2b', 'C2c');
 ```
 
-### 5.7 Thin views (can stay as SQL views on your Delta tables)
+### 5.7 Derived facts (Delta tables in script 01 — not views)
 
-Current script 16 defines these as views over materialized facts:
+Script 01 materializes these as **Delta tables** (required — the app cannot write to views):
 
-- `fact_marketing_rep_metric` — 3-row UNION from `fact_marketing_rep_period`
-- `fact_marketing_chargeback` — rows where `payout < 0`
-- `fact_marketing_arrival` — future/scheduled tours
+- `fact_marketing_rep_metric` — Step 9: 3 metrics per rep×period (qualified tours, FPS packages, tours shown)
+- `fact_marketing_chargeback` — Step 10: from `cancel_count` on staging (contract rescinds)
+- `fact_marketing_arrival` — Step 11: future-dated tours from tour ledger
 
-HGV may replace with real chargeback/arrival sources when available.
+Step 12 MERGE refreshes chargeback-adjusted columns on `fact_marketing_rep_period`.
 
 ### 5.8 Tour enrichment (Intervene drawer)
 
@@ -524,22 +508,29 @@ WHERE p.period_id = :period_id
 
 ---
 
-## 6. Current semantic layer scripts (what to supersede)
+## 6. Current semantic layer scripts
 
 | Script | Purpose | Status |
 |--------|---------|--------|
-| `12_bootstrap_live_source_views.sql` | Live views over Cognos; scans 100M+ detail rows | Too slow for interactive VDI |
-| `16_materialize_marketing_core.sql` | 2026 Delta materialization | **Working prototype** — rep + payout logic is provisional |
-| `15_apply_view_performance_governance.sql` | Do **not** run after 16 | Replaces Delta with slow views |
+| **`00_CLEAN_AND_REBUILD.sql`** | Config tables, payout seeds, stubs, grants | **Run first** |
+| **`01_MATERIALIZE_ALL_TABLES.sql`** | Cognos → Delta materialization (2026) | **Canonical ETL** |
+| **`01_ui_section_query_map.sql`** | UI → step → runtime SQL companion | Documentation / smoke tests |
+| `02_rebuild_rep_hierarchy.sql` | Rebuild managers/directors only | Optional fast fix |
+| `03_manager_view_stubs.sql` | Analytics stubs for manager view | Run after 01 if needed |
+| `12_bootstrap_live_source_views.sql` | Live views over Cognos | **Deprecated** — too slow for VDI |
+| `16_materialize_marketing_core.sql` | Earlier prototype materialization | **Deprecated** — superseded by 01 |
+| `16_ui_section_query_map.sql` | Companion to script 16 | **Deprecated** — use `01_ui_section_query_map.sql` |
 
-### Known issues in current script 16 (fixed in latest `main`, verify on VDI)
+### Issues fixed in script 01 (vs legacy script 16)
 
-1. ~~`salesperson_1_*` used instead of `opc_person_1_*`~~ → wrong rep names in dropdown  
-2. ~~`net_volume * 0.0025` for qualified payout~~ → millions in earnings  
-3. Personnel join without dedup → possible tour duplication  
-4. Some KPI fields hardcoded (`penetration_target_pct = 25`, `base_pct = 30`, `tcc_gap = 0`)
+1. Payout join to `dim_tour_status_config` (case-insensitive) — fixes all-$0 tours
+2. `penetration_pct` = guest buy rate, distinct from show/qualified rate
+3. Detail pre-aggregation — prevents fan-out / inflated earnings
+4. `dim_marketing_rep` C2a/C2b/C2c hierarchy with `dim_rep.manager_rep_id`
+5. Chargebacks from real cancel counts, not negative payout view
+6. Metric/chargeback/arrival as Delta **tables**, not views
 
-**HGV rewrite should replace script 16 entirely** while keeping output table/column names identical.
+HGV may tune business rules in SQL while keeping output table/column names identical to this contract.
 
 ---
 
@@ -593,12 +584,15 @@ fetch('/api/comp/metadata').then(r=>r.json()).then(m => console.log({
 | Path | Description |
 |------|-------------|
 | `docs/hgv-marketing-comp-ui-data-contract.md` | This document |
+| `data/comp/edw_dev_hris/00_run_order.sql` | Canonical script run order |
+| `data/comp/edw_dev_hris/00_CLEAN_AND_REBUILD.sql` | Config + seeds (prerequisite) |
+| `data/comp/edw_dev_hris/01_MATERIALIZE_ALL_TABLES.sql` | **Canonical materialization ETL** |
+| `data/comp/edw_dev_hris/01_ui_section_query_map.sql` | **UI → step → query companion** |
 | `server/marketingRepWorkspace.ts` | Workspace API SQL |
 | `server/compMetadata.ts` | Metadata SQL |
 | `server/marketingTourContext.ts` | Tour enrichment SQL |
 | `server/marketingMoneyMap.ts` | Desk rank SQL |
 | `data/comp/edw_dev_hris/06_create_marketing_benchmark.sql` | Table DDL contract |
-| `data/comp/edw_dev_hris/16_materialize_marketing_core.sql` | Current materialization (to replace) |
 | `detail.csv`, `marketing.csv`, `personnel.csv`, `uni_lead.csv`, `uni_contract.csv` | Sample source extracts |
 
 ---
