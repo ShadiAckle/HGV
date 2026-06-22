@@ -35,14 +35,17 @@
 -- │ Upcoming Arrivals panel             │ Step 11  │ fact_marketing_arrival (TABLE)         │
 -- │ Page header name / area             │ Step 4,8 │ dim_location + assigned_area           │
 -- │ Manager direct reports              │ Step 5,6 │ dim_rep.manager_rep_id + rep_period    │
+-- │ Tour Intervene drawer (Guest 360)   │ Step 7+  │ tour_payout + guest registry (09/09a)  │
+-- │ Plan Rules / Assessment panel       │ 10/10a   │ plan_assessment_profile + _segment     │
 -- └─────────────────────────────────────┴──────────┴────────────────────────────────────────┘
 --
--- NOT in script 01 (separate scripts):
---   Prerequisite config  → 00_CLEAN_AND_REBUILD.sql (dim_tour_status_config payout seeds)
+-- NOT in script 01 (separate scripts / sources):
+--   Prerequisite config     → 00_CLEAN_AND_REBUILD.sql (dim_tour_status_config payout seeds)
 --   Manager analytics stubs → 03_manager_view_stubs.sql
 --   Hierarchy-only rebuild  → 02_rebuild_rep_hierarchy.sql
---   Tour Intervene drawer   → dim_guest, dim_household, fact_tour_quality (00 stubs / 09a)
---   Plan rules panel        → plan_assessment_* (10 / 10a)
+--   Guest 360 enrichment    → 09_create_guest_registry.sql + 09a_seed (or future uni_lead ETL)
+--   Plan Assessment panel   → 10_create_plan_assessment.sql + 10a_seed_plan_assessment.sql
+--   Field sales commissions → edw_dev_hris.pwcmodels.commissions (script 12 — NOT marketing)
 --   AI insights             → LLM only (no extra SQL)
 --
 -- DEPRECATED companion: 16_ui_section_query_map.sql (references superseded script 16)
@@ -68,6 +71,10 @@
 -- │                     │ opc_person_1_employee_id → rep_id                        │
 -- │                     │ opc_person_1_name → rep_name                           │
 -- │                     │ opc_team_code (often empty — office_code used for team)  │
+-- ├─────────────────────┼──────────────────────────────────────────────────────────┤
+-- │ pwcmodels.commissions │ FIELD SALES / Varicent comp — NOT used in script 01.     │
+-- │                     │ participant, commissionAmount, orderId (closed deals).   │
+-- │                     │ Used by deprecated script 12 for sales My Comp only.     │
 -- └─────────────────────┴──────────────────────────────────────────────────────────┘
 --
 -- Step 1  _stg_marketing_tour_detail
@@ -372,7 +379,152 @@ ORDER BY p.qtd_earnings DESC NULLS LAST;
 
 
 -- =============================================================================
+-- TOUR INTERVENE DRAWER — Guest 360
+-- UI: MarketingTourInterveneDrawer (click tour row in Tour Activity)
+-- API: GET /api/comp/marketing/tour/:tour_id/context?rep_id=&period_id=
+-- Code: server/marketingTourContext.ts → buildMarketingTourContext()
+-- =============================================================================
+--
+-- PREREQUISITES (run order):
+--   00_CLEAN_AND_REBUILD.sql     — empty stub tables (dim_guest, fact_tour_quality, …)
+--   01_MATERIALIZE_ALL_TABLES.sql — Step 7 tour ledger + Step 4 dim_location
+--   09_create_guest_registry.sql — full guest-registry DDL (if not already present)
+--   09a_seed_guest_registry.sql  — demo guest 360 rows (optional; production ETL TBD)
+--
+-- WHAT WORKS TODAY (after 00 + 01 only):
+--   ✓ Tour ledger fields from fact_marketing_tour_payout (guest, payout, ABC, lead source)
+--   ✓ Planned location name via dim_location (office_code from Step 4)
+--   ✓ Chargebacks for this tour from fact_marketing_chargeback (Step 10)
+--   ✗ guest_id / household_id are NULL in 01 — guest registry joins return empty
+--   ✗ fact_tour_quality, rental stays, tour history, ownership — stubs only
+--
+-- FUTURE ETL (not built): it_uni_lead, it_uni_contract → dim_guest / fact_guest_*
+
+-- (B) RUNTIME — core enrichment query (server/marketingTourContext.ts TOUR_ENRICHMENT_SELECT)
+-- Replace :tour_id, :rep_id, :period_id
+SELECT
+  tp.tour_id, tp.rep_id, tp.period_id, tp.guest_name, tp.guest_type,
+  tp.arrival_date, tp.tour_status, tp.code, tp.payout, tp.fps_eligible, tp.fps_potential, tp.notes,
+  tp.guest_id, tp.household_id, tp.lead_source, tp.abc_score, tp.package_type, tp.xref_tour_id,
+  tp.tour_booked_date,
+  g.email AS guest_email, g.phone_token, g.qualification_code, g.owner_flag,
+  hh.hh_size_band, hh.income_band, hh.home_msa,
+  pl.location_id AS planned_location_id, pl.location_name AS planned_location_name,
+  pl.location_type AS planned_location_type, pl.market AS planned_market, pl.brand AS planned_brand,
+  pl.desk_label AS planned_desk_label,
+  cs.location_id AS stay_location_id, cs.location_name AS stay_location_name,
+  cs.location_type AS stay_location_type, cs.market AS stay_market, cs.brand AS stay_brand,
+  cs.desk_label AS stay_desk_label,
+  tq.lead_source AS tq_lead_source, tq.abc_score AS tq_abc_score, tq.package_type AS tq_package_type,
+  tq.showed_flag, tq.closed_flag, tq.contract_status, tq.rescission_flag,
+  tq.net_sales_volume, tq.vpg,
+  COALESCE(stay.nights, 0) AS stay_duration_nights,
+  COALESCE(hist.prior_tour_count, 0) AS prior_tour_count,
+  COALESCE(rent.rental_stay_count, 0) AS rental_stay_count
+FROM edw_dev_hris.hgv_comp.fact_marketing_tour_payout tp
+LEFT JOIN edw_dev_hris.hgv_comp.dim_guest g ON g.guest_id = tp.guest_id
+LEFT JOIN edw_dev_hris.hgv_comp.dim_household hh ON hh.household_id = tp.household_id
+LEFT JOIN edw_dev_hris.hgv_comp.dim_location pl ON pl.location_id = tp.planned_tour_location_id
+LEFT JOIN edw_dev_hris.hgv_comp.dim_location cs ON cs.location_id = tp.current_stay_location_id
+LEFT JOIN edw_dev_hris.hgv_comp.fact_tour_quality tq
+  ON tq.tour_id = COALESCE(tp.xref_tour_id, tp.tour_id)
+LEFT JOIN (
+  SELECT guest_id, MAX(nights) AS nights
+  FROM edw_dev_hris.hgv_comp.fact_guest_rental_stay
+  GROUP BY guest_id
+) stay ON stay.guest_id = tp.guest_id
+LEFT JOIN (
+  SELECT guest_id, COUNT(*) AS prior_tour_count
+  FROM edw_dev_hris.hgv_comp.fact_guest_tour_history
+  GROUP BY guest_id
+) hist ON hist.guest_id = tp.guest_id
+LEFT JOIN (
+  SELECT guest_id, COUNT(*) AS rental_stay_count
+  FROM edw_dev_hris.hgv_comp.fact_guest_rental_stay
+  GROUP BY guest_id
+) rent ON rent.guest_id = tp.guest_id
+WHERE tp.tour_id = :tour_id
+  AND tp.rep_id = :rep_id
+  AND tp.period_id = :period_id
+LIMIT 1;
+
+-- Chargebacks tied to this tour (also fetched by buildMarketingTourContext)
+SELECT chargeback_id, premium_gift, chargeback_amount, notes
+FROM edw_dev_hris.hgv_comp.fact_marketing_chargeback
+WHERE tour_id = :tour_id AND rep_id = :rep_id;
+
+-- SMOKE — guest registry population (expect 0 until 09a or production ETL)
+SELECT 'dim_guest' AS tbl, COUNT(*) AS rows FROM edw_dev_hris.hgv_comp.dim_guest
+UNION ALL SELECT 'dim_household', COUNT(*) FROM edw_dev_hris.hgv_comp.dim_household
+UNION ALL SELECT 'fact_tour_quality', COUNT(*) FROM edw_dev_hris.hgv_comp.fact_tour_quality
+UNION ALL SELECT 'fact_guest_ownership', COUNT(*) FROM edw_dev_hris.hgv_comp.fact_guest_ownership
+UNION ALL SELECT 'fact_guest_tour_history', COUNT(*) FROM edw_dev_hris.hgv_comp.fact_guest_tour_history
+UNION ALL SELECT 'fact_guest_rental_stay', COUNT(*) FROM edw_dev_hris.hgv_comp.fact_guest_rental_stay;
+
+-- SMOKE — tours with NULL guest_id (expected after 01-only deploy)
+SELECT COUNT(*) AS tours_with_null_guest_id
+FROM edw_dev_hris.hgv_comp.fact_marketing_tour_payout
+WHERE guest_id IS NULL;
+
+
+-- =============================================================================
+-- PLAN RULES / ASSESSMENT PANEL — HGV vs Market plan design
+-- UI: MarketingPlanAssessmentPanel (My Comp + Manager views)
+-- API: GET /api/comp/plan-assessment?persona_id=marketing_rep&period_id=2026-Q2
+-- Code: server/planAssessment.ts → fetchPlanAssessment()
+-- =============================================================================
+--
+-- PREREQUISITES (NOT in 00 or 01 — run separately):
+--   10_create_plan_assessment.sql   — DDL for plan_assessment_profile + _segment
+--   10a_seed_plan_assessment.sql    — PPT-aligned seed rows for C2a/C2b/C2c personas
+--
+-- FALLBACK: If warehouse tables are empty or missing, the app serves static rows from
+--   shared/planAssessmentCatalog.ts (client usePlanAssessment.ts also falls back).
+--
+-- NOT the same as:
+--   dim_tour_status_config (00) — tour payout $ amounts (admin-tunable)
+--   fact_marketing_rep_metric (01 Step 9) — live rep attainment metrics on My Comp
+--
+-- persona_id values (must match 10a seeds):
+--   marketing_rep      → C2a Marketing Representative
+--   marketing_manager  → C2b Marketing Manager
+--   marketing_director → C2c Marketing Director
+
+-- (A) BUILD — 10_create_plan_assessment.sql (DDL only)
+-- CREATE TABLE plan_assessment_profile (persona_id, plan_id, role_title, channel_code, effective_period)
+-- CREATE TABLE plan_assessment_segment (persona_id, effective_period, attribute, attribute_order,
+--                                       side, segment_order, segment_label, segment_value)
+
+-- (A) BUILD — 10a_seed_plan_assessment.sql (idempotent DELETE + INSERT for 2026-Q2)
+
+-- (B) RUNTIME — profile header (server/planAssessment.ts)
+SELECT persona_id, plan_id, role_title, channel_code, effective_period
+FROM edw_dev_hris.hgv_comp.plan_assessment_profile
+WHERE persona_id = :persona_id
+  AND effective_period = :period_id;
+
+-- (B) RUNTIME — comparison rows (HGV vs market side-by-side)
+SELECT attribute, attribute_order, side, segment_order, segment_label, segment_value
+FROM edw_dev_hris.hgv_comp.plan_assessment_segment
+WHERE persona_id = :persona_id
+  AND effective_period = :period_id
+ORDER BY attribute_order, side, segment_order;
+
+-- SMOKE — verify plan assessment seeded (expect 3 profiles + many segments after 10a)
+SELECT persona_id, plan_id, role_title, channel_code, effective_period
+FROM edw_dev_hris.hgv_comp.plan_assessment_profile
+ORDER BY persona_id;
+
+SELECT persona_id, attribute, side, COUNT(*) AS segment_rows
+FROM edw_dev_hris.hgv_comp.plan_assessment_segment
+WHERE effective_period = '2026-Q2'
+GROUP BY persona_id, attribute, side
+ORDER BY persona_id, attribute, side;
+
+
+-- =============================================================================
 -- PAYOUT CONFIG (admin-tunable — not in script 01, seeded in 00)
+-- Distinct from Plan Assessment panel above (design comparison vs live payout rules)
 -- =============================================================================
 
 SELECT tour_status_desc, payout_amount, is_active

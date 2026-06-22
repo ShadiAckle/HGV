@@ -247,24 +247,33 @@ Page: **My Compensation — Marketing Representative** (`client/src/pages/comp/M
 
 **SQL:** `server/marketingTourContext.ts` — `TOUR_ENRICHMENT_SELECT` (§5.8) plus per-guest ownership, rental, history, chargebacks.
 
+**Prerequisites:** `00` + `01` (tour ledger + `dim_location`). Guest 360 tables are **stubs after 00 only** — run `09_create_guest_registry.sql` + `09a_seed_guest_registry.sql` (or future `it_uni_lead` ETL) to populate.
+
 **Additional tables (guest registry — optional for MVP):**
 
-- `dim_guest`, `dim_household`, `dim_location`
+- `dim_guest`, `dim_household`, `dim_location` — `dim_location` populated in script 01 Step 4; guest/household empty until 09a
 - `fact_tour_quality`
 - `fact_guest_ownership`, `fact_guest_tour_history`, `fact_guest_rental_stay`
 
-If these are empty, drawer still opens with tour payout fields only.
+If guest registry is empty, drawer still opens with tour payout fields only. See **`01_ui_section_query_map.sql`** § Tour Intervene for smoke queries.
+
+**Note:** `edw_dev_hris.pwcmodels.commissions` is **not** used for marketing tour intervene or earnings (field sales channel only).
 
 ---
 
-### 3.10 Plan rules & weights
+### 3.10 Plan rules & weights (Plan Assessment panel)
 
 | UI | API |
 |----|-----|
 | `MarketingPlanAssessmentPanel` | `GET /api/comp/plan-assessment?persona_id=marketing_rep&period_id=` |
 
 **Tables:** `plan_assessment_profile`, `plan_assessment_segment`  
+**Prerequisites:** `10_create_plan_assessment.sql` + `10a_seed_plan_assessment.sql` (not in 00/01).  
 **Fallback:** static catalog in `shared/planAssessmentCatalog.ts` if warehouse empty.
+
+**Not the same as:** `dim_tour_status_config` (live tour payout $ from 00) or `fact_marketing_rep_metric` (live attainment from 01 Step 9).
+
+See **`01_ui_section_query_map.sql`** § Plan Rules / Assessment for runtime SQL and persona_id values (`marketing_rep`, `marketing_manager`, `marketing_director`).
 
 ---
 
