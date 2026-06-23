@@ -43,7 +43,14 @@ copyTree('dist', 'dist');
 copyTree('client/dist', 'client/dist');
 copyTree('package.json', 'package.json');
 mkdirSync(join(staging, 'scripts'), { recursive: true });
-for (const name of ['vdi-start.ps1', 'vdi-edw.env.example']) {
+for (const name of [
+  'vdi-start.ps1',
+  'vdi-edw.env.example',
+  'vdi-export-diagnostics.ps1',
+  'vdi-export-diagnostics.mjs',
+  'agent-warehouse-query.mjs',
+  'vdi-auth-url.ps1',
+]) {
   const src = join(root, 'scripts', name);
   if (existsSync(src)) cpSync(src, join(staging, 'scripts', name));
 }

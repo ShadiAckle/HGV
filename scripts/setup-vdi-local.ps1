@@ -55,8 +55,10 @@ if (-not $hostUrl -or $hostUrl -match 'REPLACE-WITH') {
 }
 $profiles = databricks auth profiles 2>&1 | Out-String
 if ($profiles -notmatch [regex]::Escape($profile) -or $profiles -match "$profile.*\s+NO") {
+  $printScript = Join-Path $PSScriptRoot 'vdi-auth-url.ps1'
+  $env:BROWSER = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$printScript`""
   Write-Host ""
-  Write-Host "Log in to HGV Databricks (browser will open):" -ForegroundColor Yellow
+  Write-Host "Log in to HGV Databricks — copy the URL below into your VDI browser:" -ForegroundColor Yellow
   databricks auth login --host $hostUrl --profile $profile
 }
 

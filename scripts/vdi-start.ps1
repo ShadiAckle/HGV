@@ -48,16 +48,22 @@ if (-not (Get-Command databricks -ErrorAction SilentlyContinue)) {
   exit 1
 }
 
+function Set-VdiAuthUrlPrinter {
+  $printScript = Join-Path $PSScriptRoot 'vdi-auth-url.ps1'
+  $env:BROWSER = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$printScript`""
+}
+
 $profiles = databricks auth profiles 2>&1 | Out-String
 if ($profiles -notmatch [regex]::Escape($profile) -or $profiles -match "$profile[^\n]*\s+NO") {
-  Write-Host "Log in once (complete in browser before continuing):" -ForegroundColor Yellow
+  Write-Host 'Log in once — copy the URL below into your VDI browser, then return here:' -ForegroundColor Yellow
+  Set-VdiAuthUrlPrinter
   databricks auth login --host $hostUrl --profile $profile
 }
 
 Write-Host "Preflight: CLI token for profile $profile..." -ForegroundColor Cyan
 $null = databricks auth token --profile $profile -o json 2>&1
 if ($LASTEXITCODE -ne 0) {
-  Write-Host "CLI auth failed. Re-run: databricks auth login --host $hostUrl --profile $profile" -ForegroundColor Red
+  Write-Host "CLI auth failed. Re-run: powershell -ExecutionPolicy Bypass -File .\scripts\vdi-start.ps1" -ForegroundColor Red
   exit 1
 }
 
