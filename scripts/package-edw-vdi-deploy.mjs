@@ -16,6 +16,12 @@ const COMP_CATALOG = process.env.COMP_CATALOG ?? 'edw_dev_hris';
 const COMP_SCHEMA = process.env.COMP_SCHEMA ?? 'hgv_comp';
 const COMP_UC = `${COMP_CATALOG}.${COMP_SCHEMA}`;
 
+const pkgJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+const releaseVersion = String(pkgJson.version ?? '0.0.0');
+
+const staging = join(root, 'build', 'edw-vdi-deploy');
+const zipPath = join(root, 'build', `hgv-comp-v${releaseVersion}-${COMP_CATALOG}.zip`);
+
 if (!skipBuild) {
   console.log('Building artifacts…');
   execSync('npm run build:artifacts', { cwd: root, stdio: 'inherit' });
@@ -28,9 +34,6 @@ for (const rel of required) {
     process.exit(1);
   }
 }
-
-const staging = join(root, 'build', 'edw-vdi-deploy');
-const zipPath = join(root, 'build', `hgv-comp-app-${COMP_CATALOG}.zip`);
 
 rmSync(staging, { recursive: true, force: true });
 mkdirSync(staging, { recursive: true });
@@ -110,6 +113,38 @@ if (existsSync(vdiEnv)) {
   // Pre-baked .env so npm start skips demo bootstrap without a manual copy step.
   writeFileSync(join(staging, '.env'), envText);
 }
+
+writeFileSync(
+  join(staging, 'VDI_QUICKSTART.txt'),
+  `HGV Compensation Hub v${releaseVersion} — VDI npm quickstart
+============================================================
+
+Prerequisites: Node.js 20+, Databricks CLI (profile hgv-edw), network to adb-7405610243855520
+
+1. Unzip this folder anywhere (e.g. C:\\Users\\jbarso\\Downloads\\hgv-comp)
+
+2. Open PowerShell in the unzipped folder (same folder as package.json):
+
+   npm install
+   npm start
+
+   App: http://127.0.0.1:8000
+
+   First time only — CLI login (copy URL into VDI browser when prompted):
+
+   powershell -ExecutionPolicy Bypass -File .\\scripts\\vdi-start.ps1
+
+3. Run warehouse SQL in Databricks SQL editor (files in data\\comp\\edw_dev_hris\\):
+   a. 00_CLEAN_AND_REBUILD.sql
+   b. 18a_seed_icm_plan_marketing.sql
+   c. 01_MATERIALIZE_ALL_TABLES.sql
+   d. 08_grant_app_permissions.sql
+
+Catalog: ${COMP_UC}  |  Profile: hgv-edw  |  NOT hgv-premium-legacy
+
+See DEPLOY_README.txt for Databricks App upload steps.
+`,
+);
 
 writeFileSync(
   join(staging, 'DEPLOY_README.txt'),
