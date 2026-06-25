@@ -579,6 +579,43 @@ LEFT JOIN edw_dev_hris.hgv_comp.dim_location loc ON loc.location_id = a.assigned
 LEFT JOIN cb ON cb.rep_id = a.rep_id AND cb.period_id = a.period_id;
 
 -- ---------------------------------------------------------------------------
+-- Step 8.5) dim_marketing_rep — keep only C2a reps with qtd_earnings > 0
+--   Drives GET /api/comp/metadata rep dropdown (no app code change).
+--   C2b managers + C2c directors always remain for manager/director personas.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp._tmp_dim_marketing_rep
+USING DELTA AS
+SELECT * FROM edw_dev_hris.hgv_comp.dim_marketing_rep;
+
+CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.dim_marketing_rep
+USING DELTA AS
+SELECT t.*
+FROM edw_dev_hris.hgv_comp._tmp_dim_marketing_rep t
+WHERE t.level_code IN ('C2b', 'C2c')
+   OR t.rep_id IN (
+     SELECT DISTINCT rep_id
+     FROM edw_dev_hris.hgv_comp.fact_marketing_rep_period
+     WHERE COALESCE(qtd_earnings, 0) > 0
+   );
+
+DROP TABLE IF EXISTS edw_dev_hris.hgv_comp._tmp_dim_marketing_rep;
+
+-- Step 8.6) Refresh dim_rep after earners-only dim_marketing_rep
+CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.dim_rep
+USING DELTA AS
+SELECT
+  rep_id, rep_name, level_code, team_id,
+  CASE
+    WHEN level_code = 'C2a' AND team_id NOT IN ('UNASSIGNED', '0', '')
+         THEN CONCAT('MGR-', team_id)
+    WHEN level_code = 'C2b' AND region IS NOT NULL AND TRIM(region) <> '' AND region <> 'Other'
+         THEN CONCAT('DIR-', region)
+    ELSE CAST(NULL AS STRING)
+  END AS manager_rep_id,
+  region, is_active
+FROM edw_dev_hris.hgv_comp.dim_marketing_rep;
+
+-- ---------------------------------------------------------------------------
 -- Step 9) fact_marketing_rep_metric  (3 metrics per rep×period)
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.fact_marketing_rep_metric

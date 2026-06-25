@@ -14,6 +14,7 @@
 --   docs/hgv-marketing-comp-ui-data-contract.md
 --
 -- Optional targeted fixes (no full Cognos rescan):
+--   01b_filter_reps_with_earnings.sql — dim_marketing_rep earners-only (after 01)
 --   02_rebuild_rep_hierarchy.sql   — dim_marketing_rep + dim_rep only
 --   98_check_managers.sql            — verify C2a/C2b/C2c counts
 --

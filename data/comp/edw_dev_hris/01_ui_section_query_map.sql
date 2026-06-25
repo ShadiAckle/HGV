@@ -18,7 +18,7 @@
 -- ┌─────────────────────────────────────┬──────────┬────────────────────────────────────────┐
 -- │ UI section                          │ Script 01│ Warehouse object                       │
 -- ├─────────────────────────────────────┼──────────┼────────────────────────────────────────┤
--- │ Rep dropdown (header)               │ Step 5   │ dim_marketing_rep (+ C2b/C2c leaders)  │
+-- │ Rep dropdown (header)               │ Step 8.5 │ dim_marketing_rep (C2a: qtd_earnings > 0) │
 -- │ Period dropdown (header)            │ Step 3   │ dim_period                             │
 -- │ Hero — What I earned                │ Step 8   │ fact_marketing_rep_period.qtd_earnings │
 -- │ Hero — Am I on track?               │ Step 8   │ penetration_pct / penetration_target   │
@@ -94,6 +94,8 @@
 -- Step 7  fact_marketing_tour_payout
 --           payout ← dim_tour_status_config (seeded in 00) via comp_status_key
 -- Step 8  fact_marketing_rep_period  ← tour ledger + staging counts + chargebacks
+-- Step 8.5 dim_marketing_rep filter   ← C2a only if qtd_earnings > 0 (rep dropdown)
+-- Step 8.6 dim_rep refresh            ← re-sync hierarchy after Step 8.5
 -- Step 9  fact_marketing_rep_metric   ← 3 plan metrics (Delta TABLE)
 -- Step 10 fact_marketing_chargeback   ← cancel_count from staging
 -- Step 11 fact_marketing_arrival      ← future-dated tours
@@ -105,15 +107,11 @@
 -- HEADER — Rep picker
 -- UI: AppContext rep dropdown
 -- API: GET /api/comp/metadata
--- Script 01: Step 5 — dim_marketing_rep
--- =============================================================================
+-- Script 01: Step 8.5 — dim_marketing_rep (earners only for C2a)
+--   Built in Step 5, filtered after Step 8 where qtd_earnings > 0
+--   C2b/C2c leaders always kept
 
--- (A) BUILD — Step 5 (summary)
---   C2a: DISTINCT rep_id from _stg_tour_enriched; team_id = dominant office_code
---   C2b: one Manager per office_code  (rep_id = 'MGR-' || office_code)
---   C2c: one Director per region      (rep_id = 'DIR-' || region)
-
--- (B) RUNTIME — server/compMetadata.ts (leaders always shown + top 500 C2a)
+-- (B) RUNTIME — server/compMetadata.ts reads dim_marketing_rep (no app change)
 WITH leaders AS (
   SELECT rep_id, COALESCE(rep_name, rep_id) AS rep_name, level_code, team_id, region, is_active
   FROM edw_dev_hris.hgv_comp.dim_marketing_rep
