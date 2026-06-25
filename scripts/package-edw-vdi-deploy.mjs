@@ -61,6 +61,14 @@ if (existsSync(join(root, 'manifest.yaml'))) {
   copyTree('manifest.yaml', 'manifest.yaml');
 }
 
+// Warehouse SQL for VDI bootstrap (run in SQL editor before/after app deploy)
+const edwSqlSrc = join(root, 'data', 'comp', 'edw_dev_hris');
+const edwSqlDest = join(staging, 'data', 'comp', 'edw_dev_hris');
+if (existsSync(edwSqlSrc)) {
+  mkdirSync(edwSqlDest, { recursive: true });
+  cpSync(edwSqlSrc, edwSqlDest, { recursive: true });
+}
+
 // Analytics SQL (read from disk at runtime — patch catalog for edw)
 const queriesSrc = join(root, 'config', 'queries');
 const queriesDest = join(staging, 'config', 'queries');
@@ -129,7 +137,14 @@ writeFileSync(
    data/comp/edw_dev_hris/08_grant_app_permissions.sql
    (replace the SP UUID in that file with your new app's SP)
 
-6. Schema DDL should already exist from 00_bootstrap_all_ddl.sql.
+6. Warehouse ETL (included in data/comp/edw_dev_hris/ inside this zip):
+   a. 00_CLEAN_AND_REBUILD.sql
+   b. 18a_seed_icm_plan_marketing.sql   (plan + tier ladder — required for What's next)
+   c. 01_MATERIALIZE_ALL_TABLES.sql
+   d. 08_grant_app_permissions.sql      (replace SP UUID with your app SP)
+
+7. VDI workspace: adb-7405610243855520, profile hgv-edw (NOT hgv-premium-legacy).
+   Local run: powershell -ExecutionPolicy Bypass -File .\\scripts\\vdi-start.ps1
 
 Catalog wiring: runtime SQL uses COMP_CATALOG/COMP_SCHEMA; analytics queries in config/queries/ are pre-patched to ${COMP_UC} in this zip.
 `,
