@@ -53,3 +53,7 @@ GRANT MODIFY ON TABLE edw_dev_hris.hgv_comp.dim_tour_status_config TO `d8d67f27-
 GRANT MODIFY ON TABLE edw_dev_hris.hgv_comp.dim_comp_rule_config TO `d8d67f27-1896-4549-9351-e7b53a9df800`;
 GRANT MODIFY ON TABLE edw_dev_hris.hgv_comp.dim_rep_filter_config TO `d8d67f27-1896-4549-9351-e7b53a9df800`;
 GRANT MODIFY ON TABLE edw_dev_hris.hgv_comp.fact_comp_config_audit_log TO `d8d67f27-1896-4549-9351-e7b53a9df800`;
+GRANT MODIFY ON TABLE edw_dev_hris.hgv_comp.dim_plan TO `d8d67f27-1896-4549-9351-e7b53a9df800`;
+GRANT MODIFY ON TABLE edw_dev_hris.hgv_comp.fact_plan TO `d8d67f27-1896-4549-9351-e7b53a9df800`;
+GRANT MODIFY ON TABLE edw_dev_hris.hgv_comp.dim_payee TO `d8d67f27-1896-4549-9351-e7b53a9df800`;
+GRANT MODIFY ON TABLE edw_dev_hris.hgv_comp.fact_payee_plan TO `d8d67f27-1896-4549-9351-e7b53a9df800`;

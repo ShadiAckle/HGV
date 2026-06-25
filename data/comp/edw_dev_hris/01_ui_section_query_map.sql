@@ -184,7 +184,7 @@ SELECT penetration_pct, penetration_target_pct, qualified_tours, tours_shown, sh
 FROM edw_dev_hris.hgv_comp.fact_marketing_rep_period
 WHERE rep_id = :rep_id AND period_id = :period_id;
 
--- (3) What's next — tier ladder at 3/6/10 qualified tours ($50/$75/$100)
+-- (3) What's next — tier ladder from fact_plan (TIER rows) via fact_payee_plan.plan_id
 SELECT next_tier_label, next_tier_gap_tours, spiff_active
 FROM edw_dev_hris.hgv_comp.fact_marketing_rep_period
 WHERE rep_id = :rep_id AND period_id = :period_id;

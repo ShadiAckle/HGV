@@ -89,6 +89,29 @@ CREATE TABLE edw_dev_hris.hgv_comp.fact_comp_config_audit_log (
   new_value     STRING
 ) USING DELTA;
 
+-- ICM plan model (Varicent-style plan / payee / assignment)
+CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.dim_plan (
+  row_uuid STRING NOT NULL, plan_id STRING NOT NULL,
+  plan_name STRING NOT NULL, icm_role STRING NOT NULL
+) USING DELTA;
+
+CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.fact_plan (
+  row_uuid STRING NOT NULL, plan_id STRING NOT NULL, component STRING NOT NULL,
+  component_type STRING NOT NULL, plan_name STRING, icm_role STRING NOT NULL,
+  period_id STRING NOT NULL, tier_seq INT, min_qualified_tours INT,
+  payout_per_unit DECIMAL(10, 2), tier_label STRING, is_active BOOLEAN NOT NULL
+) USING DELTA;
+
+CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.dim_payee (
+  row_uuid STRING NOT NULL, payee_id STRING NOT NULL,
+  employee_id STRING NOT NULL, employee_name STRING NOT NULL
+) USING DELTA;
+
+CREATE TABLE IF NOT EXISTS edw_dev_hris.hgv_comp.fact_payee_plan (
+  row_uuid STRING NOT NULL, payee_id STRING NOT NULL, plan_id STRING NOT NULL,
+  employee_id STRING NOT NULL, icm_role STRING NOT NULL, period_id STRING NOT NULL
+) USING DELTA;
+
 -- =============================================================================
 -- Create operational tables (exact schema from compSchemaBootstrap.ts)
 -- These start empty — populated by materialization or manual entry

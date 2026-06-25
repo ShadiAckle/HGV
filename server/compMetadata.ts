@@ -60,29 +60,45 @@ export async function fetchCompMetadata(runSql: RunSql) {
     ORDER BY CASE level_code WHEN 'C2c' THEN 0 WHEN 'C2b' THEN 1 ELSE 2 END, rep_name
   `);
 
+  const payeePlanRows = await safeQuery(`
+    SELECT fpp.payee_id, fpp.plan_id, fpp.icm_role
+    FROM workspace.hgv_comp.fact_payee_plan fpp
+    INNER JOIN workspace.hgv_comp.dim_period dp
+      ON dp.period_id = fpp.period_id AND dp.is_current = TRUE
+  `);
+  const planByPayeeId = new Map(
+    payeePlanRows.map((row) => [String(row.payee_id), String(row.plan_id)]),
+  );
+
+  function defaultPlanForLevel(levelCode: string): string {
+    if (levelCode === 'C2c') return 'PLAN-MKT-DIR-2026';
+    if (levelCode === 'C2b') return 'PLAN-MKT-MGR-2026';
+    return 'PLAN-MKT-REP-2026';
+  }
+
   const marketingIdentities =
     warehouseMarketingReps.length > 0
-      ? warehouseMarketingReps.map((r) => ({
+      ? warehouseMarketingReps.map((r) => {
+          const levelCode = String(r.level_code);
+          return {
           rep_id: String(r.rep_id),
           rep_name: String(r.rep_name),
-          level_code: String(r.level_code),
+          level_code: levelCode,
           team_id: String(r.team_id),
           region: String(r.region),
           is_active: r.is_active === true || r.is_active === 'true',
           role_title:
-            r.level_code === 'C2c' ? 'Marketing Director' :
-            r.level_code === 'C2b' ? 'Marketing Manager' :
+            levelCode === 'C2c' ? 'Marketing Director' :
+            levelCode === 'C2b' ? 'Marketing Manager' :
             'Marketing Representative',
           persona_id:
-            r.level_code === 'C2c' ? 'marketing_director' :
-            r.level_code === 'C2b' ? 'marketing_manager' :
+            levelCode === 'C2c' ? 'marketing_director' :
+            levelCode === 'C2b' ? 'marketing_manager' :
             'marketing_rep',
-          plan_id:
-            r.level_code === 'C2c' ? 'PLAN-MKT-DIR-2026' :
-            r.level_code === 'C2b' ? 'PLAN-MKT-MGR-2026' :
-            'PLAN-MKT-REP-2026',
+          plan_id: planByPayeeId.get(String(r.rep_id)) ?? defaultPlanForLevel(levelCode),
           identity_group: 'marketing_channel' as const,
-        }))
+        };
+        })
       : production
         ? []
         : [...MARKETING_CHANNEL_IDENTITIES];

@@ -4,7 +4,8 @@
 -- =============================================================================
 --
 -- CANONICAL VDI PRODUCTION BUILD (real Cognos data → Delta tables):
---   00_CLEAN_AND_REBUILD.sql       — config tables, payout seeds, stubs, grants
+--   00_CLEAN_AND_REBUILD.sql       — config tables, payout seeds, ICM plan DDL, stubs, grants
+--   18a_seed_icm_plan_marketing.sql — marketing plan + tier ladder seeds (idempotent)
 --   01_MATERIALIZE_ALL_TABLES.sql  — main ETL (Cognos → hgv_comp facts/dims)
 --   03_manager_view_stubs.sql      — empty analytics tables for manager My Comp
 --
@@ -24,6 +25,7 @@
 --   07_create_regional_bonus.sql
 --   09_create_guest_registry.sql
 --   10_create_plan_assessment.sql
+--   18_create_icm_plan_model.sql
 --   09_alter_scenario_tour_volume.sql
 --   11_alter_scenario_conversion.sql
 --
@@ -38,7 +40,8 @@
 --   02_seed_synthetic_data.sql, 02a_seed_core_dims.sql, 02b_seed_sales_core.sql,
 --   02c_seed_sales_diversity.sql, 04_seed_semantic_definitions.sql,
 --   05a_seed_admin_finance.sql, 06a_seed_marketing_benchmark.sql,
---   07a_seed_regional_bonus.sql, 09a_seed_guest_registry.sql, 10a_seed_plan_assessment.sql
+--   07a_seed_regional_bonus.sql, 09a_seed_guest_registry.sql, 10a_seed_plan_assessment.sql,
+--   18a_seed_icm_plan_marketing.sql
 --
 -- After app deploy — grants for app service principal:
 --   03c_grant_catalog.sql, 03a_grant_use_schema.sql, 03b_grant_select.sql,

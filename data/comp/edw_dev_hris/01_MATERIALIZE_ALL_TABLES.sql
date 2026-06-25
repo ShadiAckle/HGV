@@ -307,6 +307,44 @@ SELECT
 FROM edw_dev_hris.hgv_comp.dim_marketing_rep;
 
 -- ---------------------------------------------------------------------------
+-- Step 6.5) ICM payee registry + default plan assignment (idempotent MERGE)
+-- Prerequisite: 18a_seed_icm_plan_marketing.sql (or seeds in 00_CLEAN)
+-- ---------------------------------------------------------------------------
+MERGE INTO edw_dev_hris.hgv_comp.dim_payee AS tgt
+USING (
+  SELECT rep_id AS payee_id, rep_id AS employee_id, MAX(rep_name) AS employee_name
+  FROM edw_dev_hris.hgv_comp.dim_marketing_rep
+  WHERE rep_id IS NOT NULL AND TRIM(rep_id) <> ''
+  GROUP BY rep_id
+) src ON tgt.payee_id = src.payee_id
+WHEN MATCHED THEN UPDATE SET employee_name = src.employee_name
+WHEN NOT MATCHED THEN INSERT (row_uuid, payee_id, employee_id, employee_name)
+VALUES (UUID(), src.payee_id, src.employee_id, src.employee_name);
+
+MERGE INTO edw_dev_hris.hgv_comp.fact_payee_plan AS tgt
+USING (
+  SELECT DISTINCT
+    e.rep_id AS payee_id,
+    e.period_id,
+    e.rep_id AS employee_id,
+    CASE COALESCE(mr.level_code, 'C2a')
+      WHEN 'C2c' THEN 'PLAN-MKT-DIR-2026'
+      WHEN 'C2b' THEN 'PLAN-MKT-MGR-2026'
+      ELSE 'PLAN-MKT-REP-2026'
+    END AS plan_id,
+    CASE COALESCE(mr.level_code, 'C2a')
+      WHEN 'C2c' THEN 'marketing_director'
+      WHEN 'C2b' THEN 'marketing_manager'
+      ELSE 'marketing'
+    END AS icm_role
+  FROM edw_dev_hris.hgv_comp._stg_tour_enriched e
+  LEFT JOIN edw_dev_hris.hgv_comp.dim_marketing_rep mr ON mr.rep_id = e.rep_id
+  WHERE e.rep_id IS NOT NULL AND e.period_id IS NOT NULL
+) src ON tgt.payee_id = src.payee_id AND tgt.period_id = src.period_id
+WHEN NOT MATCHED THEN INSERT (row_uuid, payee_id, plan_id, employee_id, icm_role, period_id)
+VALUES (UUID(), src.payee_id, src.plan_id, src.employee_id, src.icm_role, src.period_id);
+
+-- ---------------------------------------------------------------------------
 -- Step 7) fact_marketing_tour_payout  (tour ledger)
 -- Payout looked up from admin config by comp_status_key (QUALIFIED/COURTESY/NO SHOW)
 -- using a CASE-INSENSITIVE match — this is the fix for the all-$0 bug.
@@ -422,12 +460,64 @@ cb AS (
   SELECT rep_id, period_id, CAST(SUM(chargeback_amount) AS DECIMAL(14,2)) AS cb_total
   FROM edw_dev_hris.hgv_comp.fact_marketing_chargeback
   GROUP BY rep_id, period_id
+),
+tier_base AS (
+  SELECT
+    a.rep_id,
+    a.period_id,
+    a.qualified_tours,
+    COALESCE(
+      fpp.plan_id,
+      CASE COALESCE(mr.level_code, 'C2a')
+        WHEN 'C2c' THEN 'PLAN-MKT-DIR-2026'
+        WHEN 'C2b' THEN 'PLAN-MKT-MGR-2026'
+        ELSE 'PLAN-MKT-REP-2026'
+      END
+    ) AS plan_id
+  FROM agg a
+  LEFT JOIN edw_dev_hris.hgv_comp.fact_payee_plan fpp
+    ON fpp.payee_id = a.rep_id AND fpp.period_id = a.period_id
+  LEFT JOIN edw_dev_hris.hgv_comp.dim_marketing_rep mr ON mr.rep_id = a.rep_id
+),
+tier_current AS (
+  SELECT
+    tb.rep_id,
+    tb.period_id,
+    fp.tier_label,
+    fp.payout_per_unit,
+    fp.tier_seq
+  FROM tier_base tb
+  INNER JOIN edw_dev_hris.hgv_comp.fact_plan fp
+    ON fp.plan_id = tb.plan_id
+   AND fp.component_type = 'TIER'
+   AND fp.is_active = TRUE
+   AND (fp.period_id = tb.period_id OR fp.period_id = '*')
+   AND fp.min_qualified_tours <= tb.qualified_tours
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY tb.rep_id, tb.period_id ORDER BY fp.min_qualified_tours DESC
+  ) = 1
+),
+tier_next AS (
+  SELECT
+    tb.rep_id,
+    tb.period_id,
+    fp.min_qualified_tours AS next_min
+  FROM tier_base tb
+  INNER JOIN edw_dev_hris.hgv_comp.fact_plan fp
+    ON fp.plan_id = tb.plan_id
+   AND fp.component_type = 'TIER'
+   AND fp.is_active = TRUE
+   AND (fp.period_id = tb.period_id OR fp.period_id = '*')
+   AND fp.min_qualified_tours > tb.qualified_tours
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY tb.rep_id, tb.period_id ORDER BY fp.min_qualified_tours ASC
+  ) = 1
 )
 SELECT
   a.rep_id,
   a.period_id,
   a.rep_name,
-  'PLAN-MKT-REP-2026'                          AS plan_id,
+  COALESCE(fpp.plan_id, tb.plan_id, 'PLAN-MKT-REP-2026') AS plan_id,
   COALESCE(loc.location_name, a.assigned_area, 'Unknown') AS assigned_area,
   COALESCE(a.assigned_area, 'Unknown')         AS bonus_area_id,
 
@@ -452,18 +542,16 @@ SELECT
   (CASE WHEN a.tours_shown > 0 THEN (a.buy_tours * 100.0 / a.tours_shown) >= 20.0 ELSE FALSE END) AS spiff_active,
 
   CASE
-    WHEN a.qualified_tours < 3  THEN 'Tier 1 — $50 per qualified tour'
-    WHEN a.qualified_tours < 6  THEN 'Tier 2 — $75 per qualified tour'
-    WHEN a.qualified_tours < 10 THEN 'Tier 3 — $100 per qualified tour'
-    ELSE 'Top Tier — max rate achieved'
+    WHEN tn.next_min IS NULL AND COALESCE(tc.tier_seq, 0) >= 4 THEN 'Top Tier — max rate achieved'
+    WHEN tc.tier_label IS NOT NULL THEN CONCAT(
+      tc.tier_label, ' — $',
+      CAST(CAST(tc.payout_per_unit AS INT) AS STRING),
+      ' per qualified tour'
+    )
+    ELSE 'Tier 1 — $50 per qualified tour'
   END AS next_tier_label,
 
-  CAST(CASE
-      WHEN a.qualified_tours < 3  THEN 3  - a.qualified_tours
-      WHEN a.qualified_tours < 6  THEN 6  - a.qualified_tours
-      WHEN a.qualified_tours < 10 THEN 10 - a.qualified_tours
-      ELSE 0
-    END AS INT) AS next_tier_gap_tours,
+  CAST(GREATEST(0, COALESCE(tn.next_min, 0) - a.qualified_tours) AS INT) AS next_tier_gap_tours,
 
   a.qualified_tour_pay,
   a.courtesy_tour_pay,
@@ -482,6 +570,11 @@ SELECT
   CAST(60.0 AS DECIMAL(6,2)) AS variable_pct,
   CAST(0.0  AS DECIMAL(6,2)) AS tcc_gap_vs_market_pct
 FROM agg a
+LEFT JOIN tier_base tb ON tb.rep_id = a.rep_id AND tb.period_id = a.period_id
+LEFT JOIN edw_dev_hris.hgv_comp.fact_payee_plan fpp
+  ON fpp.payee_id = a.rep_id AND fpp.period_id = a.period_id
+LEFT JOIN tier_current tc ON tc.rep_id = a.rep_id AND tc.period_id = a.period_id
+LEFT JOIN tier_next tn ON tn.rep_id = a.rep_id AND tn.period_id = a.period_id
 LEFT JOIN edw_dev_hris.hgv_comp.dim_location loc ON loc.location_id = a.assigned_area
 LEFT JOIN cb ON cb.rep_id = a.rep_id AND cb.period_id = a.period_id;
 

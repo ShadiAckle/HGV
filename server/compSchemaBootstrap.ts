@@ -9,6 +9,7 @@ import {
   PRIOR_PERIOD_LABEL,
 } from '../shared/compPeriods.js';
 import { ensureAdminFinanceTables } from './adminFinanceSeed.js';
+import { ensureIcmPlanMarketingSeeds, ensureIcmPlanTables } from './icmPlanBootstrap.js';
 import { ensureManagerInterventionTable } from './managerInterventions.js';
 import { ensureFinanceReferenceTables } from './financeReferenceSeed.js';
 import { ensureMarketingTeamRoster, refreshMarketingMarketPositions, ensureSalesDiversitySeed, dedupeRepMarketPositions } from './marketingTeamSeed.js';
@@ -134,6 +135,8 @@ export async function ensureCompExtensions(runSql: RunSql): Promise<void> {
   await dedupeRepMarketPositions(runSql, CURRENT_PERIOD_ID);
   await ensureSalesDiversitySeed(runSql);
   await ensureAdminFinanceTables(runSql);
+  await ensureIcmPlanTables(runSql);
+  await ensureIcmPlanMarketingSeeds(runSql);
   await ensureManagerInterventionTable(runSql);
   await ensureFinanceReferenceTables(runSql);
   await ensureGuestRegistryTables(runSql);
