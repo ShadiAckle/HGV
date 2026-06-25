@@ -92,7 +92,8 @@
 -- Step 5  dim_marketing_rep   ← C2a reps + synthesized MGR-<office>, DIR-<region>
 -- Step 6  dim_rep             ← manager_rep_id reporting lines
 -- Step 7  fact_marketing_tour_payout
---           payout ← dim_tour_status_config (seeded in 00) via comp_status_key
+--           QUALIFIED payout ← fact_plan TIER (rep plan + period qual tour seq)
+--           COURTESY / NO SHOW ← dim_tour_status_config (00)
 -- Step 8  fact_marketing_rep_period  ← tour ledger + staging counts + chargebacks
 -- Step 8.5 dim_marketing_rep filter   ← C2a only if qtd_earnings > 0 (rep dropdown)
 -- Step 8.6 dim_rep refresh            ← re-sync hierarchy after Step 8.5
@@ -290,7 +291,8 @@ WHERE p.period_id = :period_id
 -- =============================================================================
 -- TOUR ACTIVITY & CREDITS
 -- Script 01: Step 7 — fact_marketing_tour_payout
---   payout from dim_tour_status_config (00) via comp_status_key
+--   QUALIFIED payout from fact_plan TIER (plan + running qual count in period)
+--   COURTESY / NO SHOW from dim_tour_status_config (00)
 --   guest_name from lead_id_formatted when lead_name is PII-masked
 -- =============================================================================
 
@@ -480,7 +482,8 @@ WHERE guest_id IS NULL;
 --   shared/planAssessmentCatalog.ts (client usePlanAssessment.ts also falls back).
 --
 -- NOT the same as:
---   dim_tour_status_config (00) — tour payout $ amounts (admin-tunable)
+--   fact_plan TIER (18a) — qualified tour tier ladder ($50/$75/$100) + What's next
+--   dim_tour_status_config (00) — courtesy / no-show flat rates (admin-tunable)
 --   fact_marketing_rep_metric (01 Step 9) — live rep attainment metrics on My Comp
 --
 -- persona_id values (must match 10a seeds):

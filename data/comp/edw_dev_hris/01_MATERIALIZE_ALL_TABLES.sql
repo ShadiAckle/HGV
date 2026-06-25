@@ -346,11 +346,56 @@ VALUES (UUID(), src.payee_id, src.plan_id, src.employee_id, src.icm_role, src.pe
 
 -- ---------------------------------------------------------------------------
 -- Step 7) fact_marketing_tour_payout  (tour ledger)
--- Payout looked up from admin config by comp_status_key (QUALIFIED/COURTESY/NO SHOW)
--- using a CASE-INSENSITIVE match — this is the fix for the all-$0 bug.
+-- QUALIFIED payout = rep plan tier from fact_plan (period-to-date qual tour seq).
+-- COURTESY / NO SHOW = dim_tour_status_config (admin flat rates).
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE TABLE edw_dev_hris.hgv_comp.fact_marketing_tour_payout
 USING DELTA AS
+WITH rep_plan AS (
+  SELECT DISTINCT
+    t.rep_id,
+    t.period_id,
+    COALESCE(
+      fpp.plan_id,
+      CASE COALESCE(mr.level_code, 'C2a')
+        WHEN 'C2c' THEN 'PLAN-MKT-DIR-2026'
+        WHEN 'C2b' THEN 'PLAN-MKT-MGR-2026'
+        ELSE 'PLAN-MKT-REP-2026'
+      END
+    ) AS plan_id
+  FROM edw_dev_hris.hgv_comp._stg_tour_enriched t
+  LEFT JOIN edw_dev_hris.hgv_comp.fact_payee_plan fpp
+    ON fpp.payee_id = t.rep_id AND fpp.period_id = t.period_id
+  LEFT JOIN edw_dev_hris.hgv_comp.dim_marketing_rep mr ON mr.rep_id = t.rep_id
+),
+qual_ranked AS (
+  SELECT
+    t.tour_id,
+    t.rep_id,
+    t.period_id,
+    ROW_NUMBER() OVER (
+      PARTITION BY t.rep_id, t.period_id
+      ORDER BY COALESCE(t.tour_date, TO_DATE(t.tour_booked_date)), t.tour_id
+    ) AS qual_tour_seq
+  FROM edw_dev_hris.hgv_comp._stg_tour_enriched t
+  WHERE UPPER(TRIM(t.comp_status_key)) = 'QUALIFIED'
+),
+tier_payout AS (
+  SELECT
+    qr.tour_id,
+    fp.payout_per_unit
+  FROM qual_ranked qr
+  INNER JOIN rep_plan rp ON rp.rep_id = qr.rep_id AND rp.period_id = qr.period_id
+  INNER JOIN edw_dev_hris.hgv_comp.fact_plan fp
+    ON fp.plan_id = rp.plan_id
+   AND fp.component_type = 'TIER'
+   AND fp.is_active = TRUE
+   AND (fp.period_id = qr.period_id OR fp.period_id = '*')
+   AND fp.min_qualified_tours <= qr.qual_tour_seq
+  QUALIFY ROW_NUMBER() OVER (
+    PARTITION BY qr.tour_id ORDER BY fp.min_qualified_tours DESC
+  ) = 1
+)
 SELECT
   t.tour_id,
   t.rep_id,
@@ -373,8 +418,11 @@ SELECT
 
   CASE WHEN t.qualified_flag THEN 'Q' ELSE 'NQ' END AS code,
 
-  -- payout by comp status key (admin-configurable, case-insensitive lookup)
-  COALESCE(cfg.payout_amount, 0.00) AS payout,
+  CASE
+    WHEN UPPER(TRIM(t.comp_status_key)) = 'QUALIFIED'
+      THEN COALESCE(tp.payout_per_unit, cfg.payout_amount, CAST(0.00 AS DECIMAL(14,2)))
+    ELSE COALESCE(cfg.payout_amount, CAST(0.00 AS DECIMAL(14,2)))
+  END AS payout,
 
   t.qualified_flag AS fps_eligible,
 
@@ -403,6 +451,7 @@ SELECT
   TO_DATE(t.tour_booked_date) AS tour_booked_date
 
 FROM edw_dev_hris.hgv_comp._stg_tour_enriched t
+LEFT JOIN tier_payout tp ON tp.tour_id = t.tour_id
 LEFT JOIN edw_dev_hris.hgv_comp.dim_tour_status_config cfg
   ON UPPER(TRIM(t.comp_status_key)) = UPPER(TRIM(cfg.tour_status_desc))
  AND cfg.is_active = TRUE
